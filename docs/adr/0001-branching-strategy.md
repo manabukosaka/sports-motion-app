@@ -11,7 +11,7 @@
 ## 決定
 
 - **Trunk-Based Development** を採用する。`main` を常時グリーンに保ち、変更は短命ブランチから取り込む。長命の `develop` ブランチは設けない。
-- **作業単位**は `1 Sub-issue（Verifiable Unit）= 1 隔離 Worktree = 1 短命ブランチ = 1 PR` とする。単体 Issue にも同じ運用を適用する。Worktree は主チェックアウトから見て `../sports-motion-app.worktrees/issue-<num>-<slug>` に配置する。
+- **作業単位**は `1 Sub-issue（Verifiable Unit）= 1 隔離 Worktree = 1 短命ブランチ = 1 PR` とする。単体 Issue にも同じ運用を適用する。Orca に登録済みのリポジトリでは、新規ブランチの Worktree を Orca CLI で作成し、GitHub Issue を紐付ける。`-NoOrca`、Orca CLI を利用できない環境、未登録のリポジトリ、既存ローカルブランチの再利用では Git を使い、`../sports-motion-app.worktrees/issue-<num>-<slug>` に配置する。
 - **命名**は `<type>/<issue>-<slug>` とする。`<type>` は `feat`、`fix`、`spike`、`harness`、`docs` のいずれか。`start` は slug を小文字化し、ASCII 英数字以外の連続部分を `-` に置換して前後の `-` を除く。
 - **統合**は Squash Merge に統一する。各 PR に `Closes #<num>` を記載し、実行した検証コマンドと結果を証跡テーブルに残す。[PR テンプレート](../../.github/pull_request_template.md)
 - **Spike** の `spike/<num>-<slug>` ブランチは `main` へのマージを禁止する。知見を `docs/adr/` の ADR やテストフィクスチャに抽出し、成果物用のブランチの PR で取り込む。使い捨てコードは破棄する。
@@ -22,12 +22,15 @@
 
 | コマンド | 用途 |
 | :--- | :--- |
-| `./scripts/worktree.ps1 start -Issue <num> -Type <type> -Slug <slug>` | Worktree を作成し、パスとブランチ名を出力する。既存の同名ローカルブランチを再利用し、新規ブランチの起点は既定でローカルの `main` とする。 |
+| `./scripts/worktree.ps1 start -Issue <num> -Type <type> -Slug <slug>` | Worktree を作成し、パス、ブランチ名、`ORCA_MANAGED` を出力する。起点は既定で `main`。Orca で作成するときは `-Agent codex` でセッションも起動できる。 |
+| `./scripts/worktree.ps1 launch -Issue <num>` | 対象の Orca Worktree にエージェントを起動する。既定は `codex`。パス、エージェント名、Orca が返したセッション ID を出力する。 |
 | `./scripts/worktree.ps1 path -Issue <num>` | 対象 Issue の Worktree の絶対パスを取得する。 |
 | `./scripts/worktree.ps1 list` | Issue 番号、ブランチ、パス、変更の有無を確認する。 |
-| `./scripts/worktree.ps1 finish -Issue <num>` | PR のマージ後または Spike の知見抽出後に、クリーンな Worktree を削除する。`-DeleteBranch` を付けるとローカルブランチの削除も試みる。 |
+| `./scripts/worktree.ps1 finish -Issue <num>` | PR のマージ後または Spike の知見抽出後に、クリーンな Worktree を削除する。Orca の一覧にある Worktree は Orca CLI 経由で削除する。`-DeleteBranch` を付けるとローカルブランチの削除も試みる。 |
 
-Windows では、`finish` は削除対象の Worktree の外から実行する。`-DeleteBranch` は既定で `git branch -d` を使う。Squash Merge 後に Git が未マージと判定してブランチが残った場合は、成果物が `main` に取り込まれたことを確認してからローカルブランチを削除する。
+`start -Agent` と `launch` では `-Model`、`-Effort`、`-Prompt`、`-Surface chat|terminal` を指定できる。`-Effort` には `-Model` が必要。`-Activate` を付けると Orca で作成した Worktree または起動したセッションを表示する。
+
+Windows では、`finish` は削除対象の Worktree の外から実行する。`-DeleteBranch` の処理を Git が行う場合は既定で `git branch -d` を使う。Squash Merge 後に Git が未マージと判定してブランチが残った場合は、成果物が `main` に取り込まれたことを確認してからローカルブランチを削除する。
 
 ## 検討した代替案
 

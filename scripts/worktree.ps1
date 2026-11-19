@@ -1,7 +1,7 @@
 [CmdletBinding(PositionalBinding = $false)]
 param(
     [Parameter(Mandatory, Position = 0)]
-    [ValidateSet('start', 'path', 'list', 'finish')]
+    [ValidateSet('start', 'path', 'list', 'finish', 'launch')]
     [string]$Command,
 
     [ValidateRange(1, [int]::MaxValue)]
@@ -16,6 +16,14 @@ param(
     [string]$Base = 'main',
 
     [switch]$NoGh,
+    [switch]$NoOrca,
+    [switch]$Activate,
+    [string]$Agent,
+    [string]$Model,
+    [string]$Effort,
+    [string]$Prompt,
+    [ValidateSet('', 'chat', 'terminal')]
+    [string]$Surface = '',
     [switch]$DeleteBranch,
     [switch]$Force
 )
@@ -58,6 +66,78 @@ function Get-Worktrees {
     }
 }
 
+function Test-SamePath {
+    param([string]$Left, [string]$Right)
+
+    $separator = [IO.Path]::DirectorySeparatorChar
+    $comparison = if ($separator -eq '\') { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    [string]::Equals([IO.Path]::GetFullPath($Left).TrimEnd($separator), [IO.Path]::GetFullPath($Right).TrimEnd($separator), $comparison)
+}
+
+function Invoke-Orca {
+    param([string[]]$Arguments)
+
+    $nativeArgs = $Arguments
+    if ($orcaExecutable.Extension -eq '.exe' -and ($PSVersionTable.PSVersion -lt [version]'7.3' -or $PSNativeCommandArgumentPassing -eq 'Legacy')) {
+        # Legacy PowerShell passes embedded quotes through to the Windows command-line parser.
+        $nativeArgs = foreach ($argument in $nativeArgs) {
+            if ($argument -match '[\s"]') {
+                '"' + ($argument -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"'
+            } else {
+                $argument
+            }
+        }
+    }
+    $json = (Invoke-Executable $orcaExecutable.Source $nativeArgs) -join "`n"
+    $response = ConvertFrom-Json -InputObject $json
+    if ($response.ok -ne $true -or $null -eq $response.result) {
+        throw "Orca $($Arguments[0..1] -join ' ') did not return a successful result. $($response.error.message)"
+    }
+    $response.result
+}
+
+function Get-OrcaRepo {
+    param([string]$PrimaryPath)
+
+    if ($NoOrca -or -not $orcaExecutable) {
+        return $null
+    }
+    try {
+        $result = Invoke-Orca @('repo', 'list', '--json')
+        $result.repos | Where-Object { $_.id -and $_.path -and (Test-SamePath $_.path $PrimaryPath) } | Select-Object -First 1
+    } catch {
+        return $null
+    }
+}
+
+function Get-OrcaWorktree {
+    param([string]$RepoId, [string]$Path)
+
+    $result = Invoke-Orca @('worktree', 'list', '--repo', "id:$RepoId", '--json')
+    if ($null -eq $result.worktrees) {
+        throw 'Orca worktree list did not return a worktree list.'
+    }
+    $worktrees = @($result.worktrees | Where-Object { $_.id -and $_.path -and (Test-SamePath $_.path $Path) })
+    if ($worktrees.Count -gt 1 -or ($worktrees.Count -eq 0 -and $result.truncated)) {
+        throw "Could not uniquely resolve '$Path' in the Orca worktree list."
+    }
+    $worktrees | Select-Object -First 1
+}
+
+function Get-OrcaAgentArguments {
+    if ($Model) { '--model'; $Model }
+    if ($Effort) { '--effort'; $Effort }
+    if ($Prompt) { '--prompt'; $Prompt }
+    if ($Surface) { '--surface'; $Surface }
+}
+
+function Test-LocalBranch {
+    param([string]$RepoRoot, [string]$Branch)
+
+    $ref = "refs/heads/$Branch"
+    (Invoke-Executable git @('-C', $RepoRoot, 'for-each-ref', '--format=%(refname)', $ref)) -ccontains $ref
+}
+
 function Test-WorktreeDirty {
     param([string]$Path)
 
@@ -71,6 +151,9 @@ try {
     if ($Command -ne 'list' -and -not $PSBoundParameters.ContainsKey('Issue')) {
         throw "$Command requires -Issue with a positive integer."
     }
+    if ($Command -in 'start', 'launch' -and $Effort -and -not $Model) {
+        throw '-Effort requires -Model.'
+    }
     if ($Command -eq 'start') {
         $slug = ($Slug.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-')
         if (-not $slug) {
@@ -79,7 +162,10 @@ try {
     }
 
     $repoRoot = [IO.Path]::GetFullPath((Invoke-Executable git @('rev-parse', '--show-toplevel')))
-    if ($Command -in 'start', 'finish') {
+    if ($Command -in 'start', 'finish', 'launch') {
+        $orcaExecutable = if (-not $NoOrca) {
+            Get-Command orca -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        }
         $commonDir = [IO.Path]::GetFullPath((Invoke-Executable git @('-C', $repoRoot, 'rev-parse', '--path-format=absolute', '--git-common-dir')))
         if ([IO.Path]::DirectorySeparatorChar -eq '\') {
             $commonDir = $commonDir.ToLowerInvariant()
@@ -103,7 +189,14 @@ try {
     $primary = $worktrees[0]
     $issueWorktrees = @($worktrees | Where-Object { $_.IssueNumber -ceq [string]$Issue })
 
-    if ($Command -in 'path', 'finish') {
+    if ($Command -eq 'launch') {
+        $orcaRepo = Get-OrcaRepo $primary.Path
+        if (-not $orcaRepo) {
+            throw 'launch requires an Orca-managed worktree. Register the repository in Orca and run without -NoOrca.'
+        }
+    }
+
+    if ($Command -in 'path', 'finish', 'launch') {
         if ($issueWorktrees.Count -eq 0) {
             throw "No worktree found for issue #$Issue."
         }
@@ -120,17 +213,67 @@ try {
             }
 
             $branch = "$($Type.ToLowerInvariant())/$Issue-$slug"
-            $worktreeRoot = "$($primary.Path).worktrees"
-            $path = Join-Path $worktreeRoot "issue-$Issue-$slug"
-            $ref = "refs/heads/$branch"
-            $refs = Invoke-Executable git @('-C', $repoRoot, 'for-each-ref', '--format=%(refname)', $ref)
-            if ($refs -ccontains $ref) {
-                $null = Invoke-Executable git @('-C', $repoRoot, 'worktree', 'add', '--', $path, $branch)
+            $name = "issue-$Issue-$slug"
+            $branchExists = Test-LocalBranch $repoRoot $branch
+            $orcaRepo = Get-OrcaRepo $primary.Path
+            $orcaManaged = $orcaRepo -and -not $branchExists
+
+            if ($orcaManaged) {
+                $createArgs = @('worktree', 'create', '--repo', "id:$($orcaRepo.id)", '--name', $name, '--branch', $branch, '--base-branch', $Base, '--issue', "$Issue", '--json')
+                if ($Activate) {
+                    $createArgs += '--activate'
+                }
+                if ($Agent) {
+                    $createArgs += @('--agent', $Agent) + @(Get-OrcaAgentArguments)
+                }
+                $created = (Invoke-Orca $createArgs).worktree
+                if (-not $created.path -or -not $created.branch) {
+                    throw 'Orca worktree create did not return a worktree path and branch.'
+                }
+                $path = [IO.Path]::GetFullPath($created.path)
+                $branch = $created.branch -creplace '^refs/heads/', ''
             } else {
-                $null = Invoke-Executable git @('-C', $repoRoot, 'worktree', 'add', '-b', $branch, '--', $path, $Base)
+                if ($Agent -or $Model -or $Effort -or $Prompt -or $Surface) {
+                    Write-Warning 'Orca session binding requires an Orca-managed worktree. Skipping agent launch.'
+                }
+                $path = Join-Path "$($primary.Path).worktrees" $name
+                $addArgs = @('-C', $repoRoot, 'worktree', 'add')
+                if ($branchExists) {
+                    $addArgs += @('--', $path, $branch)
+                } else {
+                    $addArgs += @('-b', $branch, '--', $path, $Base)
+                }
+                $null = Invoke-Executable git $addArgs
             }
             "WORKTREE_PATH=$path"
             "BRANCH=$branch"
+            if ($orcaManaged) {
+                'ORCA_MANAGED=true'
+                if ($Agent) {
+                    'AGENT_LAUNCHED=true'
+                }
+            } else {
+                'ORCA_MANAGED=false'
+            }
+        }
+        'launch' {
+            $orcaWorktree = Get-OrcaWorktree $orcaRepo.id $target.Path
+            if (-not $orcaWorktree) {
+                throw "Issue #$Issue requires an Orca-managed worktree to launch an agent."
+            }
+
+            $agentId = if ($Agent) { $Agent } else { 'codex' }
+            $launchArgs = @('agent', 'launch', '--agent', $agentId, '--worktree', "id:$($orcaWorktree.id)") + @(Get-OrcaAgentArguments)
+            if ($Activate) {
+                $launchArgs += '--focus'
+            }
+            $launched = Invoke-Orca ($launchArgs + '--json')
+            "WORKTREE_PATH=$($target.Path)"
+            "AGENT=$agentId"
+            $sessionId = if ($launched.outcome.sessionId) { $launched.outcome.sessionId } else { $launched.sessionId }
+            if ($sessionId) {
+                "ORCA_SESSION_ID=$sessionId"
+            }
         }
         'path' {
             $target.Path
@@ -160,15 +303,33 @@ try {
                 throw "Run finish from outside '$($target.Path)' on Windows. Use '$($primary.Path)'."
             }
 
-            $removeArgs = @('-C', $primary.Path, 'worktree', 'remove')
-            if ($Force) {
-                $removeArgs += '--force'
+            $orcaRepo = Get-OrcaRepo $primary.Path
+            $orcaWorktree = if ($orcaRepo) { Get-OrcaWorktree $orcaRepo.id $target.Path }
+            if ($orcaWorktree) {
+                $removeArgs = @('worktree', 'rm', '--worktree', "id:$($orcaWorktree.id)")
+                if ($Force) {
+                    $removeArgs += '--force'
+                }
+                if ($DeleteBranch) {
+                    $removeArgs += '--delete-branch'
+                }
+                $removed = Invoke-Orca ($removeArgs + '--json')
+                if ($removed.removing -or $removed.removed -eq $false) {
+                    throw "Orca has not confirmed removal of worktree '$($target.Path)'."
+                }
+            } else {
+                $removeArgs = @('-C', $primary.Path, 'worktree', 'remove')
+                if ($Force) {
+                    $removeArgs += '--force'
+                }
+                $null = Invoke-Executable git ($removeArgs + @('--', $target.Path))
             }
-            $null = Invoke-Executable git ($removeArgs + @('--', $target.Path))
             if ($DeleteBranch) {
-                $deleteFlag = if ($Force) { '-D' } else { '-d' }
                 try {
-                    $null = Invoke-Executable git @('-C', $primary.Path, 'branch', $deleteFlag, '--', $target.Branch)
+                    if (-not $orcaWorktree -or (Test-LocalBranch $primary.Path $target.Branch)) {
+                        $deleteFlag = if ($Force) { '-D' } else { '-d' }
+                        $null = Invoke-Executable git @('-C', $primary.Path, 'branch', $deleteFlag, '--', $target.Branch)
+                    }
                 } catch {
                     throw "Removed worktree '$($target.Path)', but could not delete branch '$($target.Branch)'. $($_.Exception.Message)"
                 }

@@ -58,7 +58,8 @@ flowchart TB
 本プロジェクトでは、責務分離によってレビューの独立性と実装スループットを両立する：
 - **Orchestrator / Architect / Quality Gatekeeper**: 意図仕様（Intent Specification）・ADR策定・GitHub Projects/Issues管理・タスクのVerifiable Units分割・批判的レビュー・最終ゲート判定を担当。
 - **Implementation Worker（手を動かす実装役：`codex exec -m gpt-6.2-sol`）**: ローカル Codex CLI の `gpt-6.2-sol` を主力の実装・プロトタイプ構築・テスト実装・リファクタリング実行役として起用する。
-  - **Issue / Sub-issue ⇄ Git Worktree 1:1 連動**: 大きなタスクは GitHub ネイティブの **Sub-issues** で Verifiable Units に分解し、`scripts/worktree.ps1 start -Issue <num> -Type <type> -Slug <slug>` で隔離ワークツリー（`../sports-motion-app.worktrees/issue-<num>-<slug>`）と短命ブランチを作成した上で、対象ワークツリーに対して `codex exec -m gpt-6.2-sol -s workspace-write -C <worktree-path> -` を実行する。
+  - 大きなタスクは GitHub ネイティブの **Sub-issues** で Verifiable Units に分解し、`scripts/worktree.ps1 start -Issue <num> -Type <type> -Slug <slug>` で隔離 Worktree と短命ブランチを作成する。Orca で新規作成する際は `-Agent codex -Model gpt-6.2-sol -Prompt "<実装指示>"` を付けるとセッションを Worktree に紐付けられる。既存の Orca Worktree には `scripts/worktree.ps1 launch -Issue <num> -Model gpt-6.2-sol` でセッションを起動する。
+  - Git で作成した Worktree では、実装指示を stdin に渡して `codex exec -m gpt-6.2-sol -s workspace-write -C <worktree-path> -` を実行する。
   - 実装完了後は必ず独立視点での差分レビュー（`codex exec review` または別エージェントレビュー）と自動検証を実行し、PRマージ後に `scripts/worktree.ps1 finish -Issue <num> -DeleteBranch` でクリーンアップする。
 
 Lauren Tan の **「Trust First, Parallelism Second」** に従い、開発フェーズに連動させてエージェントの自律度・並列度を段階的に引き上げる。
