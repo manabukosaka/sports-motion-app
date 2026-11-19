@@ -1,0 +1,29 @@
+name: Technical Spike / Eval Bakeoff
+description: 技術検証プロトタイプ（使い捨て）またはモデル・手法比較ベイクオフ
+title: "[Spike] "
+labels: ["type:spike"]
+body:
+  - type: textarea
+    id: questions
+    attributes:
+      label: 検証したい問い（1〜3点）
+      description: このSpikeで白黒つけたい技術的・UX的不確実性。
+    validations:
+      required: true
+  - type: textarea
+    id: criteria
+    attributes:
+      label: 合否基準・計測指標（Explain the Number）
+      description: 精度（RMSE/r）、レイテンシ、コスト、商用ライセンス適合性などの定量基準。
+    validations:
+      required: true
+  - type: textarea
+    id: deliverables
+    attributes:
+      label: 成果物と後始末
+      value: |
+        - [ ] 定量ベンチマーク表（環境・データセット・再現コマンド明記）
+        - [ ] 結論を `docs/adr/` へADRとして記録
+        - [ ] 使い捨てコードを本体へ混入させず隔離・破棄
+    validations:
+      required: true

@@ -1,0 +1,57 @@
+name: Feature / Verifiable Unit
+description: 新機能・改善タスク（検証可能な小単位）の起票
+title: "[Feature] "
+labels: ["type:feature"]
+body:
+  - type: markdown
+    attributes:
+      value: "Lauren Tan (`pstack`) 原則に従い、境界・不変条件・検証方法を実装前に定義してください。"
+  - type: dropdown
+    id: phase
+    attributes:
+      label: 対象フェーズ
+      options:
+        - Phase 0: Discovery & Validation
+        - Phase 1: Design & Technical Spikes
+        - Phase 2: Foundation, Harness & Walking Skeleton
+        - Phase 3: MVP Build (V1.0)
+        - Phase 4: Field Beta & Hardening
+        - Phase 5: V1.0 Release & Operations
+    validations:
+      required: true
+  - type: textarea
+    id: intent
+    attributes:
+      label: 目的・背景（Intent）
+      description: 誰のどの課題を解くか。関連ドキュメント・ADRへの参照。
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: スコープと非スコープ（Laziness Protocol）
+      description: 変更する境界と、意図的に変更しない範囲。
+      value: |
+        ### In Scope
+        - 
+
+        ### Out of Scope
+        - 
+    validations:
+      required: true
+  - type: textarea
+    id: invariants
+    attributes:
+      label: 契約・ドメイン不変条件
+      description: 型・スキーマ・物理単位/座標系・エビデンス出典・権限境界など守るべき制約。
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 完了条件・実行時検証（Exit Criteria / Prove It Works）
+      description: どのコマンド・Eval・実機/ブラウザ確認で動作を証明するか。
+      value: |
+        - [ ] 単体/契約テスト追加・通過
+        - [ ] `biomech-eval` / 実機・ブラウザでの実行時証跡取得
+        - [ ] 不要コメント・Slop除去
+    validations:
+      required: true

@@ -1,0 +1,32 @@
+name: Bug Report
+description: 不具合・バイオメカニクス数値異常・トラッキング破綻の報告
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: 現象と期待挙動
+      description: 何が起きており、本来どうあるべきか。
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 再現手順・入力データ条件
+      description: 動画条件（解像度/FPS/撮影角）、使用手法（単眼AI/DLT/マーカー）、端末、再現手順。
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 観測ログ・数値・スクリーンショット
+      description: 誤差値、スタックトレース、信頼度スコア等。
+  - type: checkboxes
+    id: harness
+    attributes:
+      label: Bugfix Playbook 必須チェック
+      options:
+        - label: 修正前に必ず失敗する再現テストを作成した
+        - label: 対症療法ではなく根本原因を特定・修正した
+        - label: 再発防止制約をハーネス（型 > Lint > 回帰テスト/Eval > ルール）へ昇格させた
