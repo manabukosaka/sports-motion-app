@@ -183,8 +183,9 @@ flowchart LR
   - **Sub-issue（Verifiable Unit）**: 独立して設計・実装・テスト・PRマージできる最小単位。GitHub ネイティブの **Sub-issues** で親 Issue へ紐付け、GitHub Project の `Parent issue` / `Sub-issues progress` で進捗を自動集計する。
   - 各フェーズ末尾には必ず `[Gate N]` Issue を配置し、Quality Gate チェックリストを管理する。
 - **タスク（Issue/Sub-issue）と Git Worktree の 1:1 連動**:
-  - コード・設計変更を伴うすべての実行タスク（Sub-issue または単体 Issue）は、`scripts/worktree.ps1` を用いてリポジトリ外の隔離ワークツリー（`../sports-motion-app.worktrees/issue-<num>-<slug>`）と専用短命ブランチ（`<type>/<num>-<slug>`）を 1:1 で作成して作業する。
-  - 実装ワーカー（Codex CLI `gpt-6.2-sol`）は対象タスクの worktree パスを指定して実行し、PR マージ完了後に worktree とローカルブランチを片付ける。
+  - コード・設計変更を伴う実行タスク（Sub-issue または単体 Issue）ごとに `scripts/worktree.ps1 start -Issue <num> -Type <type> -Slug <slug>` で隔離 Worktree と専用短命ブランチ（`<type>/<num>-<slug>`）を作成する。Orca に登録済みのリポジトリで新規ブランチを作る場合は、Orca Worktree に GitHub Issue を紐付ける。`-NoOrca` を指定すると Git で作成する。
+  - Orca の実装セッションは、作成時に `start` へ `-Agent codex -Model gpt-6.2-sol` を付けるか、既存の Orca Worktree に対して `launch -Issue <num> -Model gpt-6.2-sol` を実行する。Git で作成した場合は、出力された Worktree のパスを Codex CLI に渡す。
+  - PR マージ後は `scripts/worktree.ps1 finish -Issue <num> -DeleteBranch` で Worktree とローカルブランチを片付ける。[Worktree のライフサイクル](adr/0001-branching-strategy.md#worktree-のライフサイクル)
 - **ラベル体系**:
   - 種別: `type:discovery`, `type:spike`, `type:feature`, `type:harness`, `type:eval`, `type:adr`, `type:quality-gate`, `bug`
   - 領域: `area:motion-engine`, `area:mobile-ui`, `area:coord-editor`, `area:evidence-db`, `area:team-share`, `area:infra-ci`
