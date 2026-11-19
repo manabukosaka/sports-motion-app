@@ -1,0 +1,574 @@
+{
+  "evidence_registry_version": "0.1.0",
+  "generated_at": "2026-11-19T18:26:02Z",
+  "disclaimer_policy": {
+    "non_diagnostic_flag": true,
+    "user_facing_text_ja": "用途はコーチングと動作分析の支援に限ります。医療診断や個人の傷害リスク判定への使用はできません。",
+    "show_on_comparison_and_share": true
+  },
+  "studies": [
+    {
+      "id": "fleisig_1999",
+      "domain": "baseball_pitching",
+      "authors": ["Glenn S. Fleisig", "Steve W. Barrentine", "Nigel Zheng", "Rafael F. Escamilla", "James R. Andrews"],
+      "year": 1999,
+      "journal": "Journal of Biomechanics",
+      "title": "Kinematic and kinetic comparison of baseball pitching among various levels of development",
+      "doi": "10.1016/s0021-9290(99)00127-x",
+      "measurement_modality": "optical_mocap",
+      "population_notes": "少年・高校・大学・プロの投手。各投手の速球試技を集約して競技レベル別に比較。",
+      "metrics_covered": [
+        "pitch_pelvis_peak_rotation_angular_velocity",
+        "pitch_thorax_peak_rotation_angular_velocity",
+        "pitch_pelvis_peak_rotation_timing",
+        "pitch_thorax_peak_rotation_timing",
+        "pitch_shoulder_axial_rotation_angle",
+        "pitch_shoulder_peak_internal_rotation_angular_velocity",
+        "pitch_elbow_flexion_angle",
+        "pitch_elbow_peak_extension_angular_velocity"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "光学式マーカー計測。骨盤・上部体幹のピーク時刻は踏み出し足接地からリリースまでで正規化しており、MVPの脚上げからMIRまでの割合には直接換算できない。"
+    },
+    {
+      "id": "escamilla_1998",
+      "domain": "baseball_pitching",
+      "authors": [
+        "Rafael F. Escamilla",
+        "Glenn S. Fleisig",
+        "Steven W. Barrentine",
+        "Naiquan Zheng",
+        "James R. Andrews"
+      ],
+      "year": 1998,
+      "journal": "Journal of Applied Biomechanics",
+      "title": "Kinematic Comparisons of Throwing Different Types of Baseball Pitches",
+      "doi": "10.1123/jab.14.1.1",
+      "measurement_modality": "optical_mocap",
+      "population_notes": "大学投手。速球、チェンジアップ、カーブ、スライダーを比較。",
+      "metrics_covered": [
+        "pitch_pelvis_peak_rotation_angular_velocity",
+        "pitch_thorax_peak_rotation_angular_velocity",
+        "pitch_shoulder_axial_rotation_angle",
+        "pitch_shoulder_peak_internal_rotation_angular_velocity",
+        "pitch_elbow_flexion_angle",
+        "pitch_elbow_peak_extension_angular_velocity"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "3D動画計測。速球群を分け、足接地・MER・リリースの定義と角速度ピークの探索区間を照合する。球種横断の平均や群平均波形のピークを個人ピークの平均に置き換えない。"
+    },
+    {
+      "id": "werner_2002",
+      "domain": "baseball_pitching",
+      "authors": ["Sherry L. Werner", "Tricia A. Murray", "Richard J. Hawkins", "Thomas J. Gill"],
+      "year": 2002,
+      "journal": "Journal of Shoulder and Elbow Surgery",
+      "title": "Relationship between throwing mechanics and elbow valgus in professional baseball pitchers",
+      "doi": "10.1067/mse.2002.121481",
+      "measurement_modality": "optical_mocap",
+      "population_notes": "プロ投手。春季キャンプの試合中の投球を撮影。",
+      "metrics_covered": [
+        "pitch_shoulder_axial_rotation_angle",
+        "pitch_elbow_flexion_angle"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "複数カメラ画像をデジタイズした3D解析。肩外旋と肘屈曲の採取時点を確認する。逆動力学で算出した肘外反負荷はスマホの角度から代用できない。"
+    },
+    {
+      "id": "stodden_2005",
+      "domain": "baseball_pitching",
+      "authors": ["David F. Stodden", "Glenn S. Fleisig", "Scott P. McLean", "James R. Andrews"],
+      "year": 2005,
+      "journal": "Journal of Applied Biomechanics",
+      "title": "Relationship of Biomechanical Factors to Baseball Pitching Velocity: Within Pitcher Variation",
+      "doi": "10.1123/jab.21.1.44",
+      "measurement_modality": "optical_mocap",
+      "population_notes": "男性投手。同一投手が投げた複数の全力速球を比較。",
+      "metrics_covered": [
+        "pitch_pelvis_peak_rotation_angular_velocity",
+        "pitch_thorax_peak_rotation_angular_velocity",
+        "pitch_pelvis_peak_rotation_timing",
+        "pitch_thorax_peak_rotation_timing",
+        "pitch_shoulder_axial_rotation_angle",
+        "pitch_shoulder_peak_internal_rotation_angular_velocity",
+        "pitch_elbow_flexion_angle",
+        "pitch_elbow_peak_extension_angular_velocity"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "光学式マーカーとDLTによる計測。ピーク時刻は足接地からリリースまでの区間で、接地判定は足首マーカーの速度に基づく。投手内の反復試技を独立した投手として数えない。"
+    },
+    {
+      "id": "aguinaldo_chambers_2009",
+      "domain": "baseball_pitching",
+      "authors": ["Arnel L. Aguinaldo", "Henry Chambers"],
+      "year": 2009,
+      "journal": "The American Journal of Sports Medicine",
+      "title": "Correlation of Throwing Mechanics With Elbow Valgus Load in Adult Baseball Pitchers",
+      "doi": "10.1177/0363546509336721",
+      "measurement_modality": "optical_mocap",
+      "population_notes": "屋内マウンドで投球した成人投手。腕の振り方と胸郭回旋開始の時期を比較。",
+      "metrics_covered": [
+        "pitch_shoulder_axial_rotation_angle",
+        "pitch_elbow_flexion_angle"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "光学式3D解析。胸郭回旋開始の前後関係は回旋角速度のピーク時刻と別の指標。肩外旋・肘屈曲と肘外反トルクの関連は個人の傷害判定に使わない。"
+    },
+    {
+      "id": "escamilla_2018",
+      "domain": "baseball_pitching",
+      "authors": ["Rafael F. Escamilla", "Jonathan S. Slowik", "Alek Z. Diffendaffer", "Glenn S. Fleisig"],
+      "year": 2018,
+      "journal": "Journal of Applied Biomechanics",
+      "title": "Differences Among Overhand, 3-Quarter, and Sidearm Pitching Biomechanics in Professional Baseball Players",
+      "doi": "10.1123/jab.2017-0211",
+      "measurement_modality": "optical_mocap",
+      "population_notes": "プロ投手。リリース時の腕の振り方でオーバーハンド、スリークォーター、サイドアームに分類。",
+      "metrics_covered": [
+        "pitch_pelvis_peak_rotation_angular_velocity",
+        "pitch_shoulder_axial_rotation_angle",
+        "pitch_elbow_flexion_angle"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "光学式3D解析。腕の振り方ごとに骨盤角速度・肩外旋・足接地時の肘屈曲を照合する。腕の振り方と単眼映像での遮蔽条件を記録する。"
+    },
+    {
+      "id": "slowik_2019",
+      "domain": "baseball_pitching",
+      "authors": [
+        "Jonathan S. Slowik",
+        "Kyle T. Aune",
+        "Alek Z. Diffendaffer",
+        "E. Lyle Cain",
+        "Jeffrey R. Dugas",
+        "Glenn S. Fleisig"
+      ],
+      "year": 2019,
+      "journal": "Journal of Athletic Training",
+      "title": "Fastball Velocity and Elbow-Varus Torque in Professional Baseball Pitchers",
+      "doi": "10.4085/1062-6050-558-17",
+      "measurement_modality": "optical_mocap",
+      "population_notes": "プロ投手。全力速球の球速と肘内反トルクを、投手間と投手内で分析。",
+      "metrics_covered": [],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "光学式3Dとレーダーを用いた力学研究。主結果の球速と肘内反トルクはMVP指標外。投手間の関連を同一投手の試技比較へ移さない。"
+    },
+    {
+      "id": "mccutcheon_2025",
+      "domain": "baseball_pitching",
+      "authors": ["Thomas W. McCutcheon", "Jonathan S. Slowik", "Glenn S. Fleisig"],
+      "year": 2025,
+      "journal": "Orthopaedic Journal of Sports Medicine",
+      "title": "Kinematic Parameters Associated With Elbow Varus Torque in Elite Adult Baseball Pitchers",
+      "doi": "10.1177/23259671241300560",
+      "measurement_modality": "optical_mocap",
+      "population_notes": "プロおよび大学の成人投手。既存データベースの全力速球を解析。",
+      "metrics_covered": [
+        "pitch_pelvis_rotation_angle",
+        "pitch_thorax_rotation_angle",
+        "pitch_pelvis_peak_rotation_angular_velocity",
+        "pitch_thorax_peak_rotation_angular_velocity",
+        "pitch_pelvis_peak_rotation_timing",
+        "pitch_thorax_peak_rotation_timing",
+        "pitch_shoulder_axial_rotation_angle",
+        "pitch_shoulder_peak_internal_rotation_angular_velocity",
+        "pitch_elbow_flexion_angle",
+        "pitch_elbow_peak_extension_angular_velocity"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "光学式マーカーとレーダーを使用。骨盤・胸郭および上肢の角速度ピークは局面ごとの探索範囲を照合する。体格で正規化した肘内反トルクによる群分けを一般投手の規範分布に使わない。"
+    },
+    {
+      "id": "novacheck_1998",
+      "domain": "running",
+      "authors": ["Tom F Novacheck"],
+      "year": 1998,
+      "journal": "Gait & Posture",
+      "title": "The biomechanics of running",
+      "doi": "10.1016/s0966-6362(97)00038-6",
+      "measurement_modality": "standard_guideline",
+      "population_notes": "走行周期と下肢の運動学に関するナラティブレビュー。歩行・走行・短距離走を比較。",
+      "metrics_covered": [
+        "run_hip_flexion_extension_angle",
+        "run_knee_flexion_extension_angle",
+        "run_ankle_dorsiflexion_plantarflexion_angle"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "走行周期と波形解釈の方法資料。引用元ごとに集団、速度、イベントが異なるため、レビュー内の波形を単一コホートの規範値として扱わない。"
+    },
+    {
+      "id": "ferber_2003",
+      "domain": "running",
+      "authors": ["Reed Ferber", "Irene McClay Davis", "Dorsey S. Williams III"],
+      "year": 2003,
+      "journal": "Clinical Biomechanics",
+      "title": "Gender differences in lower extremity mechanics during running",
+      "doi": "10.1016/s0268-0033(03)00025-1",
+      "measurement_modality": "optical_mocap",
+      "population_notes": "男女のレクリエーションランナー。立脚期の股・膝の3D運動学を比較。",
+      "metrics_covered": [
+        "run_hip_adduction_angle"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "比較候補は立脚期の股関節内転角。走行条件、ピークの探索範囲、関節座標系を照合し、性別で報告された集計を混合しない。"
+    },
+    {
+      "id": "souza_2016",
+      "domain": "running",
+      "authors": ["Richard B. Souza"],
+      "year": 2016,
+      "journal": "Physical Medicine and Rehabilitation Clinics of North America",
+      "title": "An Evidence-Based Videotaped Running Biomechanics Analysis",
+      "doi": "10.1016/j.pmr.2015.08.006",
+      "measurement_modality": "video_2d",
+      "population_notes": "臨床での走行動画評価の方法論。単一の規範コホートを報告した研究ではない。",
+      "metrics_covered": [
+        "run_knee_flexion_extension_angle",
+        "run_ankle_dorsiflexion_plantarflexion_angle",
+        "run_pelvic_obliquity_angle",
+        "run_hip_adduction_angle",
+        "run_cadence"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "側面・後方2D映像による観察。投影角や骨盤下制の視覚判定をISB準拠3D角に移さない。ケイデンスも計数窓を照合する。"
+    },
+    {
+      "id": "fukuchi_2017",
+      "domain": "running",
+      "authors": ["Reginaldo K. Fukuchi", "Claudiane A. Fukuchi", "Marcos Duarte"],
+      "year": 2017,
+      "journal": "PeerJ",
+      "title": "A public dataset of running biomechanics and the effects of running speed on lower extremity kinematics and kinetics",
+      "doi": "10.7717/peerj.3298",
+      "measurement_modality": "optical_mocap",
+      "population_notes": "定期的に走るランナー。標準化した靴と計装トレッドミルを使い、複数速度で測定。",
+      "metrics_covered": [
+        "run_hip_flexion_extension_angle",
+        "run_knee_flexion_extension_angle",
+        "run_ankle_dorsiflexion_plantarflexion_angle",
+        "run_hip_adduction_angle",
+        "run_cadence"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "光学式マーカーと計装トレッドミルによる公開データ。ベルト速度を層別条件とし、地上走の接地点変位や平均進行速度へ置き換えない。ストライド頻度からケイデンスを求める場合は計数単位を確認する。"
+    },
+    {
+      "id": "bramah_2018",
+      "domain": "running",
+      "authors": ["Christopher Bramah", "Stephen J. Preece", "Niamh Gill", "Lee Herrington"],
+      "year": 2018,
+      "journal": "The American Journal of Sports Medicine",
+      "title": "Is There a Pathological Gait Associated With Common Soft Tissue Running Injuries?",
+      "doi": "10.1177/0363546518793657",
+      "measurement_modality": "optical_mocap",
+      "population_notes": "走行時の軟部組織傷害があるランナーと傷害のない対照群。",
+      "metrics_covered": [
+        "run_knee_flexion_extension_angle",
+        "run_ankle_dorsiflexion_plantarflexion_angle",
+        "run_pelvic_obliquity_angle"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "3D走行計測。接地の膝・足関節と立脚中の対側骨盤下制が比較候補。ミッドスタンスの定義を照合し、傷害群と対照群の差を個人の診断基準にしない。"
+    },
+    {
+      "id": "preece_2019",
+      "domain": "running",
+      "authors": ["Stephen J. Preece", "Christopher Bramah", "Duncan Mason"],
+      "year": 2019,
+      "journal": "European Journal of Sport Science",
+      "title": "The biomechanical characteristics of high‐performance endurance running",
+      "doi": "10.1080/17461391.2018.1554707",
+      "measurement_modality": "optical_mocap",
+      "population_notes": "高パフォーマンス群とレクリエーション群の長距離ランナー。複数速度の地上走を比較。",
+      "metrics_covered": [
+        "run_knee_flexion_extension_angle",
+        "run_stride_length",
+        "run_mean_forward_speed"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "光学式3D計測。速度帯、競技レベル、接地様式を照合する。ステップ長と同側接地間のストライド長、および速度の算出区間を区別する。"
+    },
+    {
+      "id": "bobbert_1986",
+      "domain": "jump_landing",
+      "authors": ["M. F. Bobbert", "M. Mackay", "D. Schinkelshoek", "P. A. Huijing", "G. J. van Ingen Schenau"],
+      "year": 1986,
+      "journal": "European Journal of Applied Physiology and Occupational Physiology",
+      "title": "Biomechanical analysis of drop and countermovement jumps",
+      "doi": "10.1007/BF00943342",
+      "measurement_modality": "video_2d",
+      "population_notes": "同じ参加者がドロップジャンプとCMJを実施。ドロップジャンプの屈曲の大きさによる違いも分析。",
+      "metrics_covered": [
+        "jump_landing_hip_flexion_angle",
+        "jump_landing_knee_flexion_angle",
+        "jump_landing_ankle_dorsiflexion_angle"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "映画撮影と床反力計による下肢解析。押し返し局面の関節運動を参照し、台高・降り方・矢状面投影とイベント定義の一致を確認する。"
+    },
+    {
+      "id": "ford_myer_hewett_2003",
+      "domain": "jump_landing",
+      "authors": ["Kevin R. Ford", "Gregory D. Myer", "Timothy E. Hewett"],
+      "year": 2003,
+      "journal": "Medicine & Science in Sports & Exercise",
+      "title": "Valgus Knee Motion during Landing in High School Female and Male Basketball Players",
+      "doi": "10.1249/01.MSS.0000089346.85744.D9",
+      "measurement_modality": "optical_mocap",
+      "population_notes": "男女の高校バスケットボール選手。DVJの初回着地を比較。",
+      "metrics_covered": [
+        "jump_landing_knee_abduction_angle"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "光学式3D解析。外反の絶対ピーク、初回接地からの角度変化、膝屈曲ピーク時の外反角を区別し、左右と符号を照合する。"
+    },
+    {
+      "id": "hewett_2005",
+      "domain": "jump_landing",
+      "authors": [
+        "Timothy E. Hewett",
+        "Gregory D. Myer",
+        "Kevin R. Ford",
+        "Robert S. Heidt Jr.",
+        "Angelo J. Colosimo",
+        "Scott G. McLean",
+        "Antonie J. van den Bogert",
+        "Mark V. Paterno",
+        "Paul Succop"
+      ],
+      "year": 2005,
+      "journal": "The American Journal of Sports Medicine",
+      "title": "Biomechanical Measures of Neuromuscular Control and Valgus Loading of the Knee Predict Anterior Cruciate Ligament Injury Risk in Female Athletes: A Prospective Study",
+      "doi": "10.1177/0363546504269591",
+      "measurement_modality": "optical_mocap",
+      "population_notes": "サッカー、バスケットボール、バレーボールの女子選手を対象とした前向き研究。",
+      "metrics_covered": [
+        "jump_landing_knee_abduction_angle"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "光学式3Dと床反力計を使用。膝外転角と外転モーメントは別の量。対象集団で観察された関連をスマホ計測による個人のACL傷害予測に使わない。"
+    },
+    {
+      "id": "vanezis_lees_2005",
+      "domain": "jump_landing",
+      "authors": ["Athanasios Vanezis", "Adrian Lees"],
+      "year": 2005,
+      "journal": "Ergonomics",
+      "title": "A biomechanical analysis of good and poor performers of the vertical jump",
+      "doi": "10.1080/00140130500101262",
+      "measurement_modality": "optical_mocap",
+      "population_notes": "垂直跳びの成績で群分けした男子サッカー選手のCMJ。",
+      "metrics_covered": [
+        "jump_com_rise"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "光学式運動計測と床反力計を併用。跳躍高の起点・算出法と腕振り条件を照合する。成績で選んだ群は無作為な参照集団と異なる。"
+    },
+    {
+      "id": "padua_2009",
+      "domain": "jump_landing",
+      "authors": [
+        "Darin A. Padua",
+        "Stephen W. Marshall",
+        "Michelle C. Boling",
+        "Charles A. Thigpen",
+        "William E. Garrett Jr.",
+        "Anthony I. Beutler"
+      ],
+      "year": 2009,
+      "journal": "The American Journal of Sports Medicine",
+      "title": "The Landing Error Scoring System (LESS) Is a Valid and Reliable Clinical Assessment Tool of Jump-Landing Biomechanics: The JUMP-ACL Study",
+      "doi": "10.1177/0363546509343200",
+      "measurement_modality": "video_2d",
+      "population_notes": "軍士官学校の新入生。ジャンプ着地のLESSを検証。",
+      "metrics_covered": [
+        "jump_landing_hip_flexion_angle",
+        "jump_landing_knee_flexion_angle",
+        "jump_landing_ankle_dorsiflexion_angle",
+        "jump_landing_knee_abduction_angle"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "通常動画の観察スコアを3D運動解析と比較。LESSの項目・合計点は角度そのものと区別し、前方への跳び出しを含む課題をMVPのDVJと照合する。"
+    },
+    {
+      "id": "mcerlain_naylor_2014",
+      "domain": "jump_landing",
+      "authors": ["Stuart McErlain-Naylor", "Mark King", "Matthew Thomas Gerard Pain"],
+      "year": 2014,
+      "journal": "Journal of Sports Sciences",
+      "title": "Determinants of countermovement jump performance: a kinetic and kinematic analysis",
+      "doi": "10.1080/02640414.2014.924055",
+      "measurement_modality": "optical_mocap",
+      "population_notes": "跳躍経験の異なる男性。腕振りを許したCMJで、参加者ごとの最高試技を分析。",
+      "metrics_covered": [
+        "jump_com_rise"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "光学式マーカーから矢状面データを使用。原著の跳躍高は静止立位から重心頂点まで。MVPの離地から頂点までの上昇量を得るには離地時重心高が必要。"
+    },
+    {
+      "id": "krosshaug_2016",
+      "domain": "jump_landing",
+      "authors": [
+        "Tron Krosshaug",
+        "Kathrin Steffen",
+        "Eirik Kristianslund",
+        "Agnethe Nilstad",
+        "Kam-Ming Mok",
+        "Grethe Myklebust",
+        "Thor Einar Andersen",
+        "Ingar Holme",
+        "Lars Engebretsen",
+        "Roald Bahr"
+      ],
+      "year": 2016,
+      "journal": "The American Journal of Sports Medicine",
+      "title": "The Vertical Drop Jump Is a Poor Screening Test for ACL Injuries in Female Elite Soccer and Handball Players: A Prospective Cohort Study of 710 Athletes",
+      "doi": "10.1177/0363546515625048",
+      "measurement_modality": "optical_mocap",
+      "population_notes": "女子エリートのサッカー・ハンドボール選手を対象とした前向きコホート。",
+      "metrics_covered": [
+        "jump_landing_knee_flexion_angle",
+        "jump_landing_knee_abduction_angle"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "マーカー式3DのDVJで初回接地の膝外反角と膝屈曲ピークを評価。原著はDVJによるACL傷害スクリーニングの性能を低いと結論しており、診断閾値の根拠にしない。"
+    },
+    {
+      "id": "leppanen_2017",
+      "domain": "jump_landing",
+      "authors": [
+        "Mari Leppänen",
+        "Kati Pasanen",
+        "Tron Krosshaug",
+        "Pekka Kannus",
+        "Tommi Vasankari",
+        "Urho M. Kujala",
+        "Roald Bahr",
+        "Jarmo Perttunen",
+        "Jari Parkkari"
+      ],
+      "year": 2017,
+      "journal": "Orthopaedic Journal of Sports Medicine",
+      "title": "Sagittal Plane Hip, Knee, and Ankle Biomechanics and the Risk of Anterior Cruciate Ligament Injury: A Prospective Study",
+      "doi": "10.1177/2325967117745487",
+      "measurement_modality": "optical_mocap",
+      "population_notes": "若年女子のバスケットボール・フロアボール選手を対象とした前向き研究。",
+      "metrics_covered": [
+        "jump_landing_hip_flexion_angle",
+        "jump_landing_ankle_dorsiflexion_angle"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "3DのDVJで接地時の股・足関節角と可動域を評価。膝屈曲モーメントは膝屈曲角と別の量で、観察された関連を診断閾値にしない。"
+    },
+    {
+      "id": "cronstrom_2020",
+      "domain": "jump_landing",
+      "authors": ["Anna Cronström", "Mark W. Creaby", "Eva Ageberg"],
+      "year": 2020,
+      "journal": "BMC Musculoskeletal Disorders",
+      "title": "Do knee abduction kinematics and kinetics predict future anterior cruciate ligament injury risk? A systematic review and meta-analysis of prospective studies",
+      "doi": "10.1186/s12891-020-03552-3",
+      "measurement_modality": "systematic_review",
+      "population_notes": "荷重動作中の膝外転と後のACL傷害を扱う前向き研究の系統的レビュー・メタ分析。",
+      "metrics_covered": [
+        "jump_landing_knee_abduction_angle"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "初回接地やピークの膝外転を統合した解析で、ACL傷害の予測は支持されなかった。2Dと3D、角度とモーメントは別の量であり、群間差から個人の診断閾値を作らない。"
+    },
+    {
+      "id": "wu_2002",
+      "domain": "standard_method",
+      "authors": [
+        "Ge Wu",
+        "Sorin Siegler",
+        "Paul Allard",
+        "Chris Kirtley",
+        "Alberto Leardini",
+        "Dieter Rosenbaum",
+        "Mike Whittle",
+        "Darryl D D’Lima",
+        "Luca Cristofolini",
+        "Hartmut Witte",
+        "Oskar Schmid",
+        "Ian Stokes"
+      ],
+      "year": 2002,
+      "journal": "Journal of Biomechanics",
+      "title": "ISB recommendation on definitions of joint coordinate system of various joints for the reporting of human joint motion—part I: ankle, hip, and spine",
+      "doi": "10.1016/S0021-9290(01)00222-6",
+      "measurement_modality": "standard_guideline",
+      "population_notes": "ISBの標準化委員会による足関節・股関節・脊柱の関節座標系の勧告。",
+      "metrics_covered": [
+        "run_hip_flexion_extension_angle",
+        "run_ankle_dorsiflexion_plantarflexion_angle",
+        "run_hip_adduction_angle",
+        "jump_landing_hip_flexion_angle",
+        "jump_landing_ankle_dorsiflexion_angle"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "軸、符号、回転順序を照合するための方法資料。光学式マーカーとスマホでのランドマーク推定誤差や集団分布は評価していない。"
+    },
+    {
+      "id": "wu_2005",
+      "domain": "standard_method",
+      "authors": [
+        "Ge Wu",
+        "Frans C.T. van der Helm",
+        "H.E.J. (DirkJan) Veeger",
+        "Mohsen Makhsous",
+        "Peter Van Roy",
+        "Carolyn Anglin",
+        "Jochem Nagels",
+        "Andrew R. Karduna",
+        "Kevin McQuade",
+        "Xuguang Wang",
+        "Frederick W. Werner",
+        "Bryan Buchholz"
+      ],
+      "year": 2005,
+      "journal": "Journal of Biomechanics",
+      "title": "ISB recommendation on definitions of joint coordinate systems of various joints for the reporting of human joint motion—Part II: shoulder, elbow, wrist and hand",
+      "doi": "10.1016/j.jbiomech.2004.05.042",
+      "measurement_modality": "standard_guideline",
+      "population_notes": "ISBの標準化委員会による肩・肘・手関節・手の関節座標系の勧告。",
+      "metrics_covered": [
+        "pitch_shoulder_axial_rotation_angle",
+        "pitch_shoulder_peak_internal_rotation_angular_velocity",
+        "pitch_elbow_flexion_angle",
+        "pitch_elbow_peak_extension_angular_velocity"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "肩の基準体節と上腕長軸、および肘屈曲の符号を確認する。肩・肘の関節中心の位置だけでは上腕長軸まわりの回旋は確定しない。"
+    },
+    {
+      "id": "uhlrich_2023",
+      "domain": "standard_method",
+      "authors": [
+        "Scott D. Uhlrich",
+        "Antoine Falisse",
+        "Łukasz Kidziński",
+        "Julie Muccini",
+        "Michael Ko",
+        "Akshay S. Chaudhari",
+        "Jennifer L. Hicks",
+        "Scott L. Delp"
+      ],
+      "year": 2023,
+      "journal": "PLOS Computational Biology",
+      "title": "OpenCap: Human movement dynamics from smartphone videos",
+      "doi": "10.1371/journal.pcbi.1011462",
+      "measurement_modality": "markerless_smartphone",
+      "population_notes": "健常成人の歩行・スクワット・立ち上がり・ドロップジャンプを含む計測妥当性検証。",
+      "metrics_covered": [
+        "jump_landing_hip_flexion_angle",
+        "jump_landing_knee_flexion_angle",
+        "jump_landing_ankle_dorsiflexion_angle"
+      ],
+      "extraction_status": "cataloged_pending_fulltext",
+      "comparability_bias_note": "検証はスマホ2台とマーカー式モーションキャプチャ・床反力計の比較。カメラ台数、課題、座標モデルが異なる単眼投球・走行へ精度を外挿しない。"
+    }
+  ],
+  "normative_metrics": []
+}
