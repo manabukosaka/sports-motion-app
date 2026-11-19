@@ -11,6 +11,7 @@
 | [03-development-process.md](./docs/03-development-process.md) | 小規模開発における価値探索（Phase 0）〜リリース（Phase 5）の工程定義と定量品質ゲート（Exit Criteria） |
 | [04-agent-harness-design.md](./docs/04-agent-harness-design.md) | Lauren Tan（`@poteto` / `pstack`）手法に基づくエージェント駆動開発ハーネス設計 |
 | [05-mvp-sports-and-validation.md](./docs/05-mvp-sports-and-validation.md) | V1.0 対象動作、計測・撮影仕様、現場検証とモバイル技術スタックの作業仮説 |
+| [06-evidence-literature-catalog.md](./docs/06-evidence-literature-catalog.md) | 26件の査読文献、MVP指標との対応、統計比較方針と規範値の抽出手順 |
 | [ADR 索引](./docs/adr/README.md) | アーキテクチャ決定記録と記載テンプレート |
 
 ## エージェント駆動開発ハーネス

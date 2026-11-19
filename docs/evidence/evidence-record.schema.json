@@ -1,0 +1,391 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Evidence Registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["evidence_registry_version", "generated_at", "disclaimer_policy", "studies", "normative_metrics"],
+  "properties": {
+    "evidence_registry_version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-((?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "generated_at": {"type": "string", "format": "date-time"},
+    "disclaimer_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["non_diagnostic_flag", "user_facing_text_ja", "show_on_comparison_and_share"],
+      "properties": {
+        "non_diagnostic_flag": {"const": true},
+        "user_facing_text_ja": {"$ref": "#/$defs/non_blank_string"},
+        "show_on_comparison_and_share": {"const": true}
+      }
+    },
+    "studies": {"type": "array", "items": {"$ref": "#/$defs/study"}, "minItems": 15},
+    "normative_metrics": {"type": "array", "items": {"$ref": "#/$defs/normative_metric"}}
+  },
+  "$defs": {
+    "non_blank_string": {"type": "string", "pattern": "\\S"},
+    "doi": {"type": "string", "pattern": "^10\\.\\d{4,9}/\\S+$"},
+    "metric_id": {
+      "type": "string",
+      "enum": [
+        "pitch_pelvis_rotation_angle",
+        "pitch_thorax_rotation_angle",
+        "pitch_pelvis_peak_rotation_angular_velocity",
+        "pitch_thorax_peak_rotation_angular_velocity",
+        "pitch_pelvis_peak_rotation_timing",
+        "pitch_thorax_peak_rotation_timing",
+        "pitch_shoulder_axial_rotation_angle",
+        "pitch_shoulder_peak_internal_rotation_angular_velocity",
+        "pitch_elbow_flexion_angle",
+        "pitch_elbow_peak_extension_angular_velocity",
+        "run_hip_flexion_extension_angle",
+        "run_knee_flexion_extension_angle",
+        "run_ankle_dorsiflexion_plantarflexion_angle",
+        "run_pelvic_obliquity_angle",
+        "run_hip_adduction_angle",
+        "run_stride_length",
+        "run_mean_forward_speed",
+        "run_cadence",
+        "jump_landing_hip_flexion_angle",
+        "jump_landing_knee_flexion_angle",
+        "jump_landing_ankle_dorsiflexion_angle",
+        "jump_landing_knee_abduction_angle",
+        "jump_com_rise",
+        "jump_takeoff_vertical_com_velocity"
+      ]
+    },
+    "event_id": {
+      "type": "string",
+      "enum": [
+        "pitch_leg_lift",
+        "pitch_foot_contact",
+        "pitch_mer",
+        "pitch_ball_release",
+        "pitch_mir",
+        "pitch_cycle",
+        "run_initial_contact",
+        "run_mid_stance",
+        "run_toe_off",
+        "run_next_initial_contact",
+        "run_stride",
+        "run_stance",
+        "cmj_initiation",
+        "cmj_peak_flexion",
+        "cmj_takeoff",
+        "cmj_initial_landing_contact",
+        "cmj_peak_landing_flexion",
+        "cmj_cycle",
+        "dvj_initial_landing_contact",
+        "dvj_peak_landing_flexion",
+        "dvj_takeoff",
+        "dvj_rebound_landing_contact",
+        "dvj_cycle"
+      ]
+    },
+    "study": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "domain",
+        "authors",
+        "year",
+        "journal",
+        "title",
+        "doi",
+        "measurement_modality",
+        "population_notes",
+        "metrics_covered",
+        "extraction_status",
+        "comparability_bias_note"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"},
+        "domain": {
+          "type": "string",
+          "enum": ["baseball_pitching", "running", "jump_landing", "standard_method"]
+        },
+        "authors": {"type": "array", "items": {"$ref": "#/$defs/non_blank_string"}, "minItems": 1},
+        "year": {"type": "integer", "minimum": 1980, "maximum": 2026},
+        "journal": {"$ref": "#/$defs/non_blank_string"},
+        "title": {"$ref": "#/$defs/non_blank_string"},
+        "doi": {"$ref": "#/$defs/doi"},
+        "measurement_modality": {
+          "type": "string",
+          "enum": ["optical_mocap", "markerless_smartphone", "video_2d", "systematic_review", "standard_guideline"]
+        },
+        "population_notes": {"$ref": "#/$defs/non_blank_string"},
+        "metrics_covered": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/metric_id"},
+          "uniqueItems": true,
+          "description": "Candidate metric mappings, including method references. A mapping does not establish comparability or availability of statistics."
+        },
+        "extraction_status": {
+          "type": "string",
+          "enum": ["cataloged_pending_fulltext", "verified_normative"]
+        },
+        "comparability_bias_note": {"$ref": "#/$defs/non_blank_string"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"domain": {"const": "baseball_pitching"}}},
+          "then": {"properties": {"metrics_covered": {"items": {"pattern": "^pitch_"}}}}
+        },
+        {
+          "if": {"properties": {"domain": {"const": "running"}}},
+          "then": {"properties": {"metrics_covered": {"items": {"pattern": "^run_"}}}}
+        },
+        {
+          "if": {"properties": {"domain": {"const": "jump_landing"}}},
+          "then": {"properties": {"metrics_covered": {"items": {"pattern": "^jump_"}}}}
+        }
+      ]
+    },
+    "normative_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric_id",
+        "event_id",
+        "unit",
+        "anatomical_plane",
+        "stat_type",
+        "status",
+        "sample_size",
+        "source_doi",
+        "source_locator",
+        "cohort_notes",
+        "values",
+        "non_diagnostic_flag"
+      ],
+      "properties": {
+        "metric_id": {"$ref": "#/$defs/metric_id"},
+        "event_id": {"$ref": "#/$defs/event_id"},
+        "unit": {"type": "string", "enum": ["deg", "deg_per_s", "m", "m_per_s", "spm", "dimensionless"]},
+        "anatomical_plane": {
+          "type": "string",
+          "enum": ["sagittal", "frontal", "transverse", "local_axis", "vertical_axis", "temporal"]
+        },
+        "stat_type": {"type": "string", "enum": ["mean_sd", "median_iqr", "threshold_range"]},
+        "status": {"type": "string", "enum": ["pending_fulltext_extraction", "verified_normative"]},
+        "sample_size": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "Number of independent observations for the cited statistic, with the sampling unit specified in cohort_notes."
+        },
+        "source_doi": {
+          "$ref": "#/$defs/doi",
+          "description": "Must match a study DOI in this registry, case-insensitively. Enforced by the catalog validator."
+        },
+        "source_locator": {
+          "type": ["string", "null"],
+          "description": "Original page, table, figure, or supplement location."
+        },
+        "cohort_notes": {
+          "type": ["string", "null"],
+          "description": "Exact cohort, task conditions, measurement method, and sampling unit for this statistic."
+        },
+        "values": {"type": ["object", "null"]},
+        "normalized_time_fraction": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "For a point in a time-normalized interval. Store 0 to 1 for display as 0 to 100%."
+        },
+        "non_diagnostic_flag": {"const": true}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "pending_fulltext_extraction"}}},
+          "then": {
+            "properties": {
+              "sample_size": {"type": "null"},
+              "source_locator": {"type": "null"},
+              "cohort_notes": {"type": "null"},
+              "values": {"type": "null"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"status": {"const": "verified_normative"}}},
+          "then": {
+            "properties": {
+              "sample_size": {"type": "integer", "minimum": 1},
+              "source_locator": {"$ref": "#/$defs/non_blank_string"},
+              "cohort_notes": {"$ref": "#/$defs/non_blank_string"},
+              "values": {"type": "object"}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {"status": {"const": "verified_normative"}, "stat_type": {"const": "mean_sd"}}
+          },
+          "then": {"properties": {"values": {"$ref": "#/$defs/mean_sd"}}}
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {"const": "verified_normative"},
+              "stat_type": {"const": "median_iqr"}
+            }
+          },
+          "then": {"properties": {"values": {"$ref": "#/$defs/median_iqr"}}}
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {"const": "verified_normative"},
+              "stat_type": {"const": "threshold_range"}
+            }
+          },
+          "then": {"properties": {"values": {"$ref": "#/$defs/threshold_range"}}}
+        },
+        {
+          "if": {"properties": {"metric_id": {"pattern": "^pitch_"}}},
+          "then": {"properties": {"event_id": {"pattern": "^pitch_"}}}
+        },
+        {
+          "if": {"properties": {"metric_id": {"pattern": "^run_"}}},
+          "then": {"properties": {"event_id": {"pattern": "^run_"}}}
+        },
+        {
+          "if": {"properties": {"metric_id": {"pattern": "^jump_"}}},
+          "then": {"properties": {"event_id": {"pattern": "^(?:cmj|dvj)_"}}}
+        },
+        {
+          "if": {
+            "properties": {
+              "metric_id": {"enum": ["pitch_pelvis_rotation_angle", "pitch_thorax_rotation_angle"]}
+            }
+          },
+          "then": {"properties": {"unit": {"const": "deg"}, "anatomical_plane": {"const": "transverse"}}}
+        },
+        {
+          "if": {
+            "properties": {
+              "metric_id": {
+                "enum": ["pitch_pelvis_peak_rotation_angular_velocity", "pitch_thorax_peak_rotation_angular_velocity"]
+              }
+            }
+          },
+          "then": {
+            "properties": {"unit": {"const": "deg_per_s"}, "anatomical_plane": {"const": "transverse"}}
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metric_id": {
+                "enum": ["pitch_pelvis_peak_rotation_timing", "pitch_thorax_peak_rotation_timing"]
+              }
+            }
+          },
+          "then": {
+            "properties": {"unit": {"const": "dimensionless"}, "anatomical_plane": {"const": "temporal"}}
+          }
+        },
+        {
+          "if": {"properties": {"metric_id": {"enum": ["pitch_shoulder_axial_rotation_angle"]}}},
+          "then": {"properties": {"unit": {"const": "deg"}, "anatomical_plane": {"const": "local_axis"}}}
+        },
+        {
+          "if": {
+            "properties": {
+              "metric_id": {"enum": ["pitch_shoulder_peak_internal_rotation_angular_velocity"]}
+            }
+          },
+          "then": {
+            "properties": {"unit": {"const": "deg_per_s"}, "anatomical_plane": {"const": "local_axis"}}
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metric_id": {
+                "enum": [
+                  "pitch_elbow_flexion_angle",
+                  "run_hip_flexion_extension_angle",
+                  "run_knee_flexion_extension_angle",
+                  "run_ankle_dorsiflexion_plantarflexion_angle",
+                  "jump_landing_hip_flexion_angle",
+                  "jump_landing_knee_flexion_angle",
+                  "jump_landing_ankle_dorsiflexion_angle"
+                ]
+              }
+            }
+          },
+          "then": {"properties": {"unit": {"const": "deg"}, "anatomical_plane": {"const": "sagittal"}}}
+        },
+        {
+          "if": {"properties": {"metric_id": {"enum": ["pitch_elbow_peak_extension_angular_velocity"]}}},
+          "then": {
+            "properties": {"unit": {"const": "deg_per_s"}, "anatomical_plane": {"const": "sagittal"}}
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metric_id": {
+                "enum": ["run_pelvic_obliquity_angle", "run_hip_adduction_angle", "jump_landing_knee_abduction_angle"]
+              }
+            }
+          },
+          "then": {"properties": {"unit": {"const": "deg"}, "anatomical_plane": {"const": "frontal"}}}
+        },
+        {
+          "if": {"properties": {"metric_id": {"enum": ["run_stride_length"]}}},
+          "then": {"properties": {"unit": {"const": "m"}, "anatomical_plane": {"const": "local_axis"}}}
+        },
+        {
+          "if": {"properties": {"metric_id": {"enum": ["run_mean_forward_speed"]}}},
+          "then": {
+            "properties": {"unit": {"const": "m_per_s"}, "anatomical_plane": {"const": "local_axis"}}
+          }
+        },
+        {
+          "if": {"properties": {"metric_id": {"enum": ["run_cadence"]}}},
+          "then": {"properties": {"unit": {"const": "spm"}, "anatomical_plane": {"const": "temporal"}}}
+        },
+        {
+          "if": {"properties": {"metric_id": {"enum": ["jump_com_rise"]}}},
+          "then": {"properties": {"unit": {"const": "m"}, "anatomical_plane": {"const": "vertical_axis"}}}
+        },
+        {
+          "if": {"properties": {"metric_id": {"enum": ["jump_takeoff_vertical_com_velocity"]}}},
+          "then": {
+            "properties": {"unit": {"const": "m_per_s"}, "anatomical_plane": {"const": "vertical_axis"}}
+          }
+        },
+        {
+          "if": {"required": ["normalized_time_fraction"]},
+          "then": {
+            "properties": {
+              "event_id": {"enum": ["pitch_cycle", "run_stride", "run_stance", "cmj_cycle", "dvj_cycle"]}
+            }
+          }
+        }
+      ]
+    },
+    "mean_sd": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mean", "sd"],
+      "properties": {"mean": {"type": "number"}, "sd": {"type": "number", "minimum": 0}}
+    },
+    "median_iqr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["median", "q1", "q3"],
+      "properties": {"median": {"type": "number"}, "q1": {"type": "number"}, "q3": {"type": "number"}}
+    },
+    "threshold_range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lower", "upper"],
+      "properties": {"lower": {"type": "number"}, "upper": {"type": "number"}}
+    }
+  }
+}
