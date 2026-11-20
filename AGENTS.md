@@ -44,6 +44,13 @@
 - **No Unchecked Parallelism**: 現在の Trust Level（`docs/04-agent-harness-design.md` §3）を超えた無秩序な並列実装を行わない。
 
 ## 現在の開発フェーズ
-- **現在地**: Phase 0（価値探索）完了準備 → Phase 1（プロダクト設計・技術検証Spike）移行前
-- **現在の Trust Level**: Level 0（Supervised）
-- **次の必須マイルストーン**: Phase 0 のユーザー検証/対象競技確定、および Phase 1 の技術検証Spike（3D解析ベイクオフ・座標編集UX・LINE共有ビューア）とADR作成
+- **現在地**: Phase 2（基盤・ハーネス構築／Walking Skeleton）
+- **現在の Trust Level**: Level 1（Verified Single）
+- **ローカル検証コマンド**（リポジトリルートで実行）
+  - `uv run --no-project --with jsonschema python scripts/test-contracts.py`
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-evidence-catalog.ps1`（Windows。Linux では `pwsh -NoProfile -File scripts/test-evidence-catalog.ps1`）
+  - `uv run --project services/motion-engine --frozen mypy services/motion-engine/src`
+  - `uv run --project services/motion-engine --frozen ruff check services/motion-engine/src evals/biomechanics scripts/test-license-gate.py`
+  - `uv run --project services/motion-engine --frozen pytest evals/biomechanics/tests`
+  - `uv run --project services/motion-engine --frozen python evals/biomechanics/run_eval.py`
+  - `uv run --project services/motion-engine --frozen python scripts/test-license-gate.py --self-test`

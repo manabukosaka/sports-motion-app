@@ -1,0 +1,49 @@
+name: CI
+
+'on':
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  contracts-and-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.14'
+      - run: uv run --no-project --with jsonschema python scripts/test-contracts.py
+      - run: pwsh -NoProfile -File scripts/test-evidence-catalog.ps1
+
+  verify-geometry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.14'
+      - run: uv lock --project services/motion-engine --check
+      - run: uv run --project services/motion-engine --frozen python scripts/test-license-gate.py --self-test
+      - run: uv run --project services/motion-engine --frozen mypy services/motion-engine/src
+      - run: uv run --project services/motion-engine --frozen ruff check services/motion-engine/src evals/biomechanics scripts/test-license-gate.py
+      - run: uv run --project services/motion-engine --frozen pytest evals/biomechanics/tests
+
+  biomech-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.14'
+      - run: uv run --project services/motion-engine --frozen python evals/biomechanics/run_eval.py
+
+  worktree-tooling:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-worktree.ps1
