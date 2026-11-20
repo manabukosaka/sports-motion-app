@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sports-motion-app.invalid/contracts/common.schema.json",
+  "title": "Shared contract definitions",
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?![\\s\\S])"
+    },
+    "sha256_or_none": {
+      "type": "string",
+      "pattern": "^(?:[0-9A-Fa-f]{64}|none)(?![\\s\\S])"
+    },
+    "license_tier": {"enum": ["A", "B", "C"]},
+    "unit": {"enum": ["deg", "rad", "deg_per_s", "rad_per_s", "m", "mm", "px", "m_per_s", "spm", "dimensionless"]},
+    "coordinate_frame": {"enum": ["Image2D", "Camera3D", "CalibratedWorld3D", "HipRelative3D", "SegmentLocal3D"]},
+    "observation_source": {"enum": ["tracker_raw", "manual_edit", "spline_interpolated"]},
+    "missing_reason": {"enum": ["occluded", "low_confidence", "out_of_frame", "unidentifiable_axis", "insufficient_calibration"]},
+    "non_blank_string": {"type": "string", "pattern": "\\S"},
+    "frame_index": {"type": "integer", "minimum": 0},
+    "timestamp_sec": {"type": "number", "minimum": 0},
+    "normalized_time_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+    "analysis_provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version", "pipeline_version", "stage_models", "filter_spec_version",
+        "calibration_id_or_none", "coordinate_revision_id"
+      ],
+      "properties": {
+        "contract_version": {"$ref": "#/$defs/semver"},
+        "pipeline_version": {"$ref": "#/$defs/semver"},
+        "stage_models": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["stage", "model_hash", "license_tier"],
+            "properties": {
+              "stage": {"enum": ["tracker_2d", "coordinate_revision", "reconstructor_3d", "filter_and_kinematics"]},
+              "model_hash": {"$ref": "#/$defs/sha256_or_none"},
+              "license_tier": {"$ref": "#/$defs/license_tier"}
+            }
+          }
+        },
+        "filter_spec_version": {"$ref": "#/$defs/semver"},
+        "calibration_id_or_none": {
+          "$ref": "#/$defs/non_blank_string",
+          "description": "Calibration ID, or the literal 'none' when no calibration was used."
+        },
+        "coordinate_revision_id": {"$ref": "#/$defs/non_blank_string"}
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "contract_version": "0.1.0",
+  "calibration_id": "calibration-dlt",
+  "mode": "dlt_control_poles",
+  "views": [
+    {
+      "view_id": "side",
+      "intrinsics": {"fx_px": 800, "fy_px": 800, "cx_px": 960, "cy_px": 540},
+      "distortion_coefficients": [0, 0, 0, 0, 0],
+      "dlt_params": [160, 0, 192, 960, 0, 160, 108, 540, 0, 0, 0.2]
+    },
+    {
+      "view_id": "rear_oblique",
+      "intrinsics": {"fx_px": 800, "fy_px": 800, "cx_px": 960, "cy_px": 540},
+      "distortion_coefficients": [0, 0, 0, 0, 0],
+      "dlt_params": [160, 0, 192, 800, 0, 160, 108, 540, 0, 0]
+    }
+  ],
+  "held_out_check": {
+    "reprojection_error_px": 0,
+    "known_distance_rmse_m": 0
+  }
+}

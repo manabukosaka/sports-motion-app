@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sports-motion-app.invalid/contracts/pose-2d-sequence.schema.json",
+  "title": "2D pose and coordinate revision contracts",
+  "oneOf": [
+    {"$ref": "#/$defs/Pose2DSequence"},
+    {"$ref": "#/$defs/CoordinateRevision"}
+  ],
+  "$defs": {
+    "Pose2DSequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version", "trial_id", "view_id", "fps", "width_px", "height_px",
+        "lens_undistorted", "coordinate_frame", "unit", "frames"
+      ],
+      "properties": {
+        "contract_version": {"$ref": "common.schema.json#/$defs/semver"},
+        "trial_id": {"$ref": "common.schema.json#/$defs/non_blank_string"},
+        "view_id": {"$ref": "common.schema.json#/$defs/non_blank_string"},
+        "fps": {"type": "number", "exclusiveMinimum": 0},
+        "width_px": {"type": "integer", "minimum": 1},
+        "height_px": {"type": "integer", "minimum": 1},
+        "lens_undistorted": {"type": "boolean"},
+        "coordinate_frame": {"const": "Image2D"},
+        "unit": {"const": "px"},
+        "frames": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Original frame indices and capture timestamps must each strictly increase. Gaps are allowed.",
+          "items": {"$ref": "#/$defs/frame"}
+        }
+      }
+    },
+    "CoordinateRevision": {
+      "description": "Append-only overlay operation scoped to a trial. Raw observations and committed revisions are immutable.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "revision_id", "expected_head", "parent_revision_id", "operation", "edits"],
+      "properties": {
+        "contract_version": {"$ref": "common.schema.json#/$defs/semver"},
+        "revision_id": {"$ref": "common.schema.json#/$defs/non_blank_string"},
+        "expected_head": {"$ref": "#/$defs/revision_reference"},
+        "parent_revision_id": {
+          "$ref": "#/$defs/revision_reference",
+          "description": "Previous committed revision in the append history."
+        },
+        "operation": {"enum": ["edit", "undo", "redo"]},
+        "edits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["view_id", "frame_index", "landmark"],
+            "properties": {
+              "view_id": {"$ref": "common.schema.json#/$defs/non_blank_string"},
+              "frame_index": {"$ref": "common.schema.json#/$defs/frame_index"},
+              "landmark": {"$ref": "#/$defs/landmark"}
+            }
+          }
+        }
+      },
+      "if": {"properties": {"operation": {"const": "edit"}}},
+      "then": {"properties": {"edits": {"minItems": 1}}},
+      "else": {
+        "properties": {
+          "edits": {"maxItems": 0},
+          "expected_head": {"type": "string"},
+          "parent_revision_id": {"type": "string"}
+        }
+      }
+    },
+    "revision_reference": {
+      "anyOf": [
+        {"$ref": "common.schema.json#/$defs/non_blank_string"},
+        {"type": "null"}
+      ]
+    },
+    "frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frame_index", "timestamp_sec", "landmarks"],
+      "properties": {
+        "frame_index": {"$ref": "common.schema.json#/$defs/frame_index"},
+        "timestamp_sec": {"$ref": "common.schema.json#/$defs/timestamp_sec"},
+        "landmarks": {"type": "array", "items": {"$ref": "#/$defs/landmark"}}
+      }
+    },
+    "landmark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["landmark_id", "x", "y", "confidence", "source", "missing_reason"],
+      "properties": {
+        "landmark_id": {"$ref": "common.schema.json#/$defs/non_blank_string"},
+        "x": {"type": ["number", "null"]},
+        "y": {"type": ["number", "null"]},
+        "confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "source": {"$ref": "common.schema.json#/$defs/observation_source"},
+        "missing_reason": {
+          "anyOf": [{"$ref": "common.schema.json#/$defs/missing_reason"}, {"type": "null"}]
+        }
+      },
+      "if": {"properties": {"missing_reason": {"type": "null"}}},
+      "then": {"properties": {"x": {"type": "number"}, "y": {"type": "number"}}},
+      "else": {"properties": {"x": {"type": "null"}, "y": {"type": "null"}}}
+    }
+  }
+}

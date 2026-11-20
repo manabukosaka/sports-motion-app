@@ -1,0 +1,8 @@
+{
+  "contract_version": "0.1.0",
+  "revision_id": "coordinates-3",
+  "expected_head": "coordinates-2",
+  "parent_revision_id": "coordinates-2",
+  "operation": "redo",
+  "edits": []
+}

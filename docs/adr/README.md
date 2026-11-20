@@ -7,6 +7,7 @@
 | [ADR-0003](./0003-versioning-strategy.md) | 4軸のバージョン管理 | Accepted |
 | [ADR-0004](./0004-formal-mechanical-verification.md) | 高リスク領域の形式・機械的検証 | Accepted |
 | [ADR-0005](./0005-testing-strategy.md) | 5層テスト戦略と実行時検証 | Accepted |
+| [ADR-0006](./0006-tech-stack-and-contracts.md) | 技術スタックと共有データ契約 | Accepted |
 
 ## テンプレート
 

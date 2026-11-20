@@ -14,6 +14,8 @@
 | [06-evidence-literature-catalog.md](./docs/06-evidence-literature-catalog.md) | 26件の査読文献、MVP指標との対応、統計比較方針と規範値の抽出手順 |
 | [07-formal-verification-models.md](./docs/07-formal-verification-models.md) | 試技・座標編集の状態遷移、幾何・物理不変条件、テナント・LINE共有認可と Phase 2 CI |
 | [ADR 索引](./docs/adr/README.md) | アーキテクチャ決定記録と記載テンプレート |
+| [ADR-0006](./docs/adr/0006-tech-stack-and-contracts.md) | 技術スタックと共有データ契約 |
+| [packages/contracts/](./packages/contracts/) | 共有 JSON Schema と検証用フィクスチャ |
 
 ## エージェント駆動開発ハーネス
 

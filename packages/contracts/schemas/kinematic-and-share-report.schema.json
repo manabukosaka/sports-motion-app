@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sports-motion-app.invalid/contracts/kinematic-and-share-report.schema.json",
+  "title": "Kinematic metrics and share report contracts",
+  "oneOf": [
+    {"$ref": "#/$defs/KinematicMetrics"},
+    {"$ref": "#/$defs/ShareReportSnapshot"}
+  ],
+  "$defs": {
+    "KinematicMetrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version", "analysis_revision_id", "movement_type", "provenance",
+        "events", "scalar_metrics", "normalized_waveforms"
+      ],
+      "properties": {
+        "contract_version": {"$ref": "common.schema.json#/$defs/semver"},
+        "analysis_revision_id": {"$ref": "common.schema.json#/$defs/non_blank_string"},
+        "movement_type": {"enum": ["baseball_pitching", "running", "cmj", "dvj"]},
+        "provenance": {"$ref": "common.schema.json#/$defs/analysis_provenance"},
+        "events": {"type": "array", "items": {"$ref": "#/$defs/event"}},
+        "scalar_metrics": {"type": "array", "items": {"$ref": "#/$defs/scalar_metric"}},
+        "normalized_waveforms": {"type": "array", "items": {"$ref": "#/$defs/normalized_waveform"}}
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "frame_index", "timestamp_sec", "detection_mode"],
+      "properties": {
+        "event_id": {"$ref": "#/$defs/event_id", "not": {"$ref": "#/$defs/interval_id"}},
+        "frame_index": {"$ref": "common.schema.json#/$defs/frame_index"},
+        "timestamp_sec": {"$ref": "common.schema.json#/$defs/timestamp_sec"},
+        "detection_mode": {"enum": ["automatic", "manual"]},
+        "side": {"$ref": "#/$defs/side"}
+      }
+    },
+    "scalar_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric_id", "event_id", "value_or_null", "unit", "anatomical_plane", "missing_reason_or_null"],
+      "properties": {
+        "metric_id": {"$ref": "#/$defs/metric_id"},
+        "event_id": {"$ref": "#/$defs/event_id"},
+        "value_or_null": {"type": ["number", "null"]},
+        "unit": {"$ref": "common.schema.json#/$defs/unit"},
+        "anatomical_plane": {"$ref": "#/$defs/anatomical_plane"},
+        "missing_reason_or_null": {
+          "anyOf": [{"$ref": "common.schema.json#/$defs/missing_reason"}, {"type": "null"}]
+        },
+        "side": {"$ref": "#/$defs/side"}
+      },
+      "if": {"properties": {"value_or_null": {"type": "null"}}},
+      "then": {"properties": {"missing_reason_or_null": {"type": "string"}}},
+      "else": {"properties": {"missing_reason_or_null": {"type": "null"}}}
+    },
+    "normalized_waveform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric_id", "interval_id", "unit", "anatomical_plane", "points"],
+      "properties": {
+        "metric_id": {"$ref": "#/$defs/metric_id"},
+        "interval_id": {"$ref": "#/$defs/interval_id"},
+        "unit": {"$ref": "common.schema.json#/$defs/unit"},
+        "anatomical_plane": {"$ref": "#/$defs/anatomical_plane"},
+        "side": {"$ref": "#/$defs/side"},
+        "points": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["normalized_time_fraction", "value"],
+            "properties": {
+              "normalized_time_fraction": {"$ref": "common.schema.json#/$defs/normalized_time_fraction"},
+              "value": {"type": "number"}
+            }
+          }
+        }
+      }
+    },
+    "ShareReportSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version", "share_link_id", "team_id", "analysis_revision_id", "evidence_snapshot_id",
+        "evidence_registry_version", "issued_at", "expires_at", "non_diagnostic_flag",
+        "disclaimer_text_ja", "kinematic_summary", "evidence_comparisons"
+      ],
+      "properties": {
+        "contract_version": {"$ref": "common.schema.json#/$defs/semver"},
+        "share_link_id": {"$ref": "common.schema.json#/$defs/non_blank_string"},
+        "team_id": {"$ref": "common.schema.json#/$defs/non_blank_string"},
+        "analysis_revision_id": {"$ref": "common.schema.json#/$defs/non_blank_string"},
+        "evidence_snapshot_id": {"$ref": "common.schema.json#/$defs/non_blank_string"},
+        "evidence_registry_version": {"$ref": "common.schema.json#/$defs/semver"},
+        "issued_at": {"type": "string", "format": "date-time"},
+        "expires_at": {"type": "string", "format": "date-time"},
+        "non_diagnostic_flag": {"const": true},
+        "disclaimer_text_ja": {"$ref": "common.schema.json#/$defs/non_blank_string"},
+        "kinematic_summary": {"$ref": "#/$defs/KinematicMetrics"},
+        "evidence_comparisons": {
+          "type": "array",
+          "description": "Frozen comparisons with verified reference data. Empty when no verified comparable statistic is available.",
+          "items": {"$ref": "#/$defs/evidence_comparison"}
+        }
+      }
+    },
+    "evidence_comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric_id", "event_id", "unit", "anatomical_plane", "source_doi", "source_locator",
+        "source_authors", "source_year", "source_journal", "measurement_modality", "cohort_notes",
+        "sample_size", "stat_type", "reference_values", "observed_value"
+      ],
+      "properties": {
+        "metric_id": {"$ref": "#/$defs/metric_id"},
+        "event_id": {"$ref": "#/$defs/event_id"},
+        "unit": {"$ref": "../evidence/evidence-record.schema.json#/$defs/normative_metric/properties/unit"},
+        "anatomical_plane": {"$ref": "#/$defs/anatomical_plane"},
+        "side": {"$ref": "#/$defs/side"},
+        "source_doi": {"$ref": "../evidence/evidence-record.schema.json#/$defs/doi"},
+        "source_locator": {"$ref": "common.schema.json#/$defs/non_blank_string"},
+        "source_authors": {"$ref": "../evidence/evidence-record.schema.json#/$defs/study/properties/authors"},
+        "source_year": {"type": "integer", "minimum": 1980},
+        "source_journal": {"$ref": "common.schema.json#/$defs/non_blank_string"},
+        "measurement_modality": {"$ref": "../evidence/evidence-record.schema.json#/$defs/study/properties/measurement_modality"},
+        "cohort_notes": {"$ref": "common.schema.json#/$defs/non_blank_string"},
+        "sample_size": {"type": "integer", "minimum": 1},
+        "stat_type": {"$ref": "../evidence/evidence-record.schema.json#/$defs/normative_metric/properties/stat_type"},
+        "reference_values": {"type": "object"},
+        "observed_value": {"type": "number"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"stat_type": {"const": "mean_sd"}}},
+          "then": {"properties": {"reference_values": {"$ref": "../evidence/evidence-record.schema.json#/$defs/mean_sd"}}}
+        },
+        {
+          "if": {"properties": {"stat_type": {"const": "median_iqr"}}},
+          "then": {"properties": {"reference_values": {"$ref": "../evidence/evidence-record.schema.json#/$defs/median_iqr"}}}
+        },
+        {
+          "if": {"properties": {"stat_type": {"const": "threshold_range"}}},
+          "then": {"properties": {"reference_values": {"$ref": "../evidence/evidence-record.schema.json#/$defs/threshold_range"}}}
+        }
+      ]
+    },
+    "event_id": {"$ref": "../evidence/evidence-record.schema.json#/$defs/event_id"},
+    "metric_id": {"$ref": "../evidence/evidence-record.schema.json#/$defs/metric_id"},
+    "interval_id": {"enum": ["pitch_cycle", "run_stride", "run_stance", "cmj_cycle", "dvj_cycle"]},
+    "anatomical_plane": {"$ref": "../evidence/evidence-record.schema.json#/$defs/normative_metric/properties/anatomical_plane"},
+    "side": {"enum": ["left", "right"]}
+  }
+}

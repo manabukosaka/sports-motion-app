@@ -1,0 +1,41 @@
+{
+  "contract_version": "0.1.0",
+  "coordinate_frame": "CalibratedWorld3D",
+  "unit": "m",
+  "is_metric_calibrated": true,
+  "provenance": {
+    "contract_version": "0.1.0",
+    "pipeline_version": "0.1.0",
+    "stage_models": [
+      {
+        "stage": "tracker_2d",
+        "model_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "license_tier": "A"
+      },
+      {"stage": "reconstructor_3d", "model_hash": "none", "license_tier": "A"},
+      {"stage": "filter_and_kinematics", "model_hash": "none", "license_tier": "A"}
+    ],
+    "filter_spec_version": "0.1.0",
+    "calibration_id_or_none": "calibration-dlt",
+    "coordinate_revision_id": "coordinates-raw"
+  },
+  "frames": [
+    {
+      "frame_index": 0,
+      "timestamp_sec": 0,
+      "landmarks": [
+        {"landmark_id": "right_hip", "x": 0.15, "y": 0.68, "z": 0.08, "source": "tracker_raw", "missing_reason": null},
+        {"landmark_id": "right_knee", "x": 0.185, "y": 1.094, "z": 0.08, "source": "tracker_raw", "missing_reason": null}
+      ]
+    },
+    {
+      "frame_index": 2,
+      "timestamp_sec": 0.016667,
+      "landmarks": [
+        {"landmark_id": "right_hip", "x": 0.152, "y": 0.68, "z": 0.08, "source": "tracker_raw", "missing_reason": null},
+        {"landmark_id": "right_knee", "x": null, "y": null, "z": null, "source": "tracker_raw", "missing_reason": "occluded"}
+      ]
+    }
+  ],
+  "bone_length_stability_mm": null
+}

@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sports-motion-app.invalid/contracts/calibration-params.schema.json",
+  "title": "CalibrationParams",
+  "oneOf": [
+    {"$ref": "#/$defs/monocular_reference"},
+    {"$ref": "#/$defs/dlt_control_poles"},
+    {"$ref": "#/$defs/stereo_checkerboard_charuco"}
+  ],
+  "$defs": {
+    "calibration_id": {
+      "$ref": "common.schema.json#/$defs/non_blank_string",
+      "not": {"const": "none"}
+    },
+    "monocular_reference": {
+      "description": "Identifies the reference view for hip-relative model estimates.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "calibration_id", "mode", "view_id"],
+      "properties": {
+        "contract_version": {"$ref": "common.schema.json#/$defs/semver"},
+        "calibration_id": {"$ref": "#/$defs/calibration_id"},
+        "mode": {"const": "monocular_reference"},
+        "view_id": {"$ref": "common.schema.json#/$defs/non_blank_string"}
+      }
+    },
+    "dlt_control_poles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "calibration_id", "mode", "views", "held_out_check"],
+      "properties": {
+        "contract_version": {"$ref": "common.schema.json#/$defs/semver"},
+        "calibration_id": {"$ref": "#/$defs/calibration_id"},
+        "mode": {"const": "dlt_control_poles"},
+        "views": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"$ref": "#/$defs/dlt_view"}
+        },
+        "held_out_check": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reprojection_error_px", "known_distance_rmse_m"],
+          "properties": {
+            "reprojection_error_px": {"$ref": "#/$defs/reprojection_error_px"},
+            "known_distance_rmse_m": {"type": "number", "minimum": 0}
+          }
+        }
+      }
+    },
+    "dlt_view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["view_id", "intrinsics", "distortion_coefficients", "dlt_params"],
+      "properties": {
+        "view_id": {"$ref": "common.schema.json#/$defs/non_blank_string"},
+        "intrinsics": {"$ref": "#/$defs/intrinsics"},
+        "distortion_coefficients": {"$ref": "#/$defs/distortion_coefficients"},
+        "dlt_params": {
+          "description": "Coefficients [L1, ..., L11] for undistorted pixel projection of world XYZ in meters. The U numerator uses L1..L4, V uses L5..L8, and the shared denominator is L9*X + L10*Y + L11*Z + 1.",
+          "type": "array",
+          "minItems": 11,
+          "maxItems": 11,
+          "items": {"type": "number"}
+        }
+      }
+    },
+    "stereo_checkerboard_charuco": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version", "calibration_id", "mode", "views", "rotation_matrix",
+        "translation_m", "fit_rms_px", "held_out_check"
+      ],
+      "properties": {
+        "contract_version": {"$ref": "common.schema.json#/$defs/semver"},
+        "calibration_id": {"$ref": "#/$defs/calibration_id"},
+        "mode": {"const": "stereo_checkerboard_charuco"},
+        "views": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"$ref": "#/$defs/stereo_view"}
+        },
+        "rotation_matrix": {
+          "description": "Rows of R mapping Camera3D from views[0] to views[1] by X1 = R * X0 + t.",
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {"$ref": "#/$defs/vector_3"}
+        },
+        "translation_m": {"$ref": "#/$defs/vector_3"},
+        "fit_rms_px": {"type": "number", "minimum": 0},
+        "held_out_check": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reprojection_error_px"],
+          "properties": {"reprojection_error_px": {"$ref": "#/$defs/reprojection_error_px"}}
+        }
+      }
+    },
+    "stereo_view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["view_id", "intrinsics", "distortion_coefficients"],
+      "properties": {
+        "view_id": {"$ref": "common.schema.json#/$defs/non_blank_string"},
+        "intrinsics": {"$ref": "#/$defs/intrinsics"},
+        "distortion_coefficients": {"$ref": "#/$defs/distortion_coefficients"}
+      }
+    },
+    "intrinsics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fx_px", "fy_px", "cx_px", "cy_px"],
+      "properties": {
+        "fx_px": {"type": "number", "exclusiveMinimum": 0},
+        "fy_px": {"type": "number", "exclusiveMinimum": 0},
+        "cx_px": {"type": "number"},
+        "cy_px": {"type": "number"}
+      }
+    },
+    "distortion_coefficients": {
+      "description": "Brown–Conrady coefficients in order [k1, k2, p1, p2, k3].",
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {"type": "number"}
+    },
+    "reprojection_error_px": {"type": "number", "minimum": 0},
+    "vector_3": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "number"}}
+  }
+}
