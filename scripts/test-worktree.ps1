@@ -148,7 +148,8 @@ $result = switch ($command) {
     }
 }
 
-$tempRoot = (Resolve-Path -LiteralPath $env:TEMP).ProviderPath
+# Git reports long paths even when TEMP uses an 8.3 alias.
+$tempRoot = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:TEMP).ProviderPath)
 $sandbox = Join-Path $tempRoot "worktree-test-$([guid]::NewGuid().ToString('N'))"
 $repo = Join-Path $sandbox ('repo with spaces ' + [char]0x52D5 + ' ' + ('x' * 48))
 $worktreeRoot = "$repo.worktrees"
