@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "packages": [
+    {
+      "name": "annotated-types",
+      "version": "0.8.0",
+      "license": "MIT",
+      "rationale": "Provides reusable type constraints for Pydantic.",
+      "source": "https://pypi.org/project/annotated-types/0.8.0/"
+    },
+    {
+      "name": "attrs",
+      "version": "26.1.0",
+      "license": "MIT",
+      "rationale": "Provides immutable data structures used by jsonschema and referencing.",
+      "source": "https://pypi.org/project/attrs/26.1.0/"
+    },
+    {
+      "name": "jsonschema",
+      "version": "4.26.0",
+      "license": "MIT",
+      "rationale": "Validates runtime payloads against the shared JSON Schema contracts.",
+      "source": "https://pypi.org/project/jsonschema/4.26.0/"
+    },
+    {
+      "name": "jsonschema-specifications",
+      "version": "2025.9.1",
+      "license": "MIT",
+      "rationale": "Provides the JSON Schema meta-schemas used by jsonschema.",
+      "source": "https://pypi.org/project/jsonschema-specifications/2025.9.1/"
+    },
+    {
+      "name": "numpy",
+      "version": "2.5.5",
+      "license": "BSD-3-Clause",
+      "rationale": "Provides the array and numerical primitives for geometry. The release metadata also lists 0BSD, MIT, Zlib and CC0-1.0 for bundled code.",
+      "source": "https://pypi.org/project/numpy/2.5.5/"
+    },
+    {
+      "name": "opencv-python-headless",
+      "version": "5.1.0.95",
+      "license": "Apache-2.0",
+      "rationale": "Provides the Apache-2.0 OpenCV camera and geometry routines with MIT-licensed packaging scripts. Upstream wheels bundle LGPL-2.1 FFmpeg, which has separate redistribution obligations.",
+      "source": "https://pypi.org/project/opencv-python-headless/5.1.0.95/"
+    },
+    {
+      "name": "pydantic",
+      "version": "2.14.4",
+      "license": "MIT",
+      "rationale": "Enforces strict typed models at motion-engine boundaries.",
+      "source": "https://pypi.org/project/pydantic/2.14.4/"
+    },
+    {
+      "name": "pydantic-core",
+      "version": "2.50.5",
+      "license": "MIT",
+      "rationale": "Provides the validation and serialization engine used by Pydantic.",
+      "source": "https://pypi.org/project/pydantic-core/2.50.5/"
+    },
+    {
+      "name": "referencing",
+      "version": "0.37.0",
+      "license": "MIT",
+      "rationale": "Resolves references between the registered JSON Schema contracts.",
+      "source": "https://pypi.org/project/referencing/0.37.0/"
+    },
+    {
+      "name": "rpds-py",
+      "version": "2026.9.1",
+      "license": "MIT",
+      "rationale": "Provides persistent data structures used by referencing and jsonschema.",
+      "source": "https://pypi.org/project/rpds-py/2026.9.1/"
+    },
+    {
+      "name": "scipy",
+      "version": "1.18.1",
+      "license": "BSD-3-Clause",
+      "rationale": "Provides numerical routines for interpolation and signal filtering.",
+      "source": "https://pypi.org/project/scipy/1.18.1/"
+    },
+    {
+      "name": "typing-extensions",
+      "version": "4.16.0",
+      "license": "PSF-2.0",
+      "rationale": "Provides portable typing features required by the runtime validation stack.",
+      "source": "https://pypi.org/project/typing-extensions/4.16.0/"
+    },
+    {
+      "name": "typing-inspection",
+      "version": "0.4.5",
+      "license": "MIT",
+      "rationale": "Provides the runtime type inspection used by Pydantic.",
+      "source": "https://pypi.org/project/typing-inspection/0.4.5/"
+    }
+  ]
+}
