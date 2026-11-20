@@ -1,0 +1,27 @@
+{
+  "contract_version": "0.1.0",
+  "calibration_id": "calibration-stereo",
+  "mode": "stereo_checkerboard_charuco",
+  "views": [
+    {
+      "view_id": "side",
+      "intrinsics": {"fx_px": 800, "fy_px": 800, "cx_px": 960, "cy_px": 540},
+      "distortion_coefficients": [0, 0, 0, 0, 0]
+    },
+    {
+      "view_id": "rear_oblique",
+      "intrinsics": {"fx_px": 800, "fy_px": 800, "cx_px": 960, "cy_px": 540},
+      "distortion_coefficients": [0, 0, 0, 0, 0]
+    }
+  ],
+  "rotation_matrix": [
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1]
+  ],
+  "translation_m": [-1, 0, 0],
+  "fit_rms_px": 0,
+  "held_out_check": {
+    "reprojection_error_px": 0
+  }
+}

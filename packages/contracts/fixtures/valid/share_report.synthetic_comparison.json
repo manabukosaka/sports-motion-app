@@ -1,0 +1,92 @@
+{
+  "contract_version": "0.1.0",
+  "share_link_id": "share-synthetic-comparison",
+  "team_id": "team-demo",
+  "analysis_revision_id": "analysis-running-dlt",
+  "evidence_snapshot_id": "evidence-synthetic-comparison",
+  "evidence_registry_version": "0.0.0-fixture",
+  "issued_at": "2026-11-20T02:30:00Z",
+  "expires_at": "2026-11-27T02:30:00Z",
+  "non_diagnostic_flag": true,
+  "disclaimer_text_ja": "用途はコーチングと動作分析の支援に限ります。医療診断や個人の傷害リスク判定への使用はできません。",
+  "kinematic_summary": {
+    "contract_version": "0.1.0",
+    "analysis_revision_id": "analysis-running-dlt",
+    "movement_type": "running",
+    "provenance": {
+      "contract_version": "0.1.0",
+      "pipeline_version": "0.1.0",
+      "stage_models": [
+        {
+          "stage": "tracker_2d",
+          "model_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "license_tier": "A"
+        },
+        {"stage": "reconstructor_3d", "model_hash": "none", "license_tier": "A"},
+        {"stage": "filter_and_kinematics", "model_hash": "none", "license_tier": "A"}
+      ],
+      "filter_spec_version": "0.1.0",
+      "calibration_id_or_none": "calibration-dlt",
+      "coordinate_revision_id": "coordinates-raw"
+    },
+    "events": [
+      {"event_id": "run_initial_contact", "frame_index": 24, "timestamp_sec": 0.2, "detection_mode": "manual", "side": "right"},
+      {"event_id": "run_toe_off", "frame_index": 55, "timestamp_sec": 0.458333, "detection_mode": "automatic", "side": "right"},
+      {"event_id": "run_next_initial_contact", "frame_index": 108, "timestamp_sec": 0.9, "detection_mode": "manual", "side": "right"}
+    ],
+    "scalar_metrics": [
+      {
+        "metric_id": "run_knee_flexion_extension_angle",
+        "event_id": "run_initial_contact",
+        "value_or_null": 18,
+        "unit": "deg",
+        "anatomical_plane": "sagittal",
+        "missing_reason_or_null": null,
+        "side": "right"
+      },
+      {
+        "metric_id": "run_ankle_dorsiflexion_plantarflexion_angle",
+        "event_id": "run_initial_contact",
+        "value_or_null": null,
+        "unit": "deg",
+        "anatomical_plane": "sagittal",
+        "missing_reason_or_null": "occluded",
+        "side": "right"
+      }
+    ],
+    "normalized_waveforms": [
+      {
+        "metric_id": "run_knee_flexion_extension_angle",
+        "interval_id": "run_stride",
+        "unit": "deg",
+        "anatomical_plane": "sagittal",
+        "side": "right",
+        "points": [
+          {"normalized_time_fraction": 0, "value": 18},
+          {"normalized_time_fraction": 0.4, "value": 43},
+          {"normalized_time_fraction": 1, "value": 16}
+        ]
+      }
+    ]
+  },
+  "evidence_comparisons": [
+    {
+      "metric_id": "run_knee_flexion_extension_angle",
+      "event_id": "run_initial_contact",
+      "unit": "deg",
+      "anatomical_plane": "sagittal",
+      "side": "right",
+      "source_doi": "10.0000/synthetic-contract-fixture",
+      "source_locator": "Synthetic fixture, reference row 1",
+      "source_authors": ["Synthetic fixture author"],
+      "source_year": 2026,
+      "source_journal": "Synthetic fixture, no publication",
+      "measurement_modality": "optical_mocap",
+      "cohort_notes": "Synthetic fixture only. Twenty generated samples, one per simulated runner.",
+      "sample_size": 20,
+      "stat_type": "mean_sd",
+      "reference_values": {"mean": 20, "sd": 4},
+      "observed_value": 18
+    }
+  ]
+}

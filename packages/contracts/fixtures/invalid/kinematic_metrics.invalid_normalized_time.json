@@ -1,0 +1,60 @@
+{
+  "contract_version": "0.1.0",
+  "analysis_revision_id": "analysis-running-dlt",
+  "movement_type": "running",
+  "provenance": {
+    "contract_version": "0.1.0",
+    "pipeline_version": "0.1.0",
+    "stage_models": [
+      {
+        "stage": "tracker_2d",
+        "model_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "license_tier": "A"
+      },
+      {"stage": "reconstructor_3d", "model_hash": "none", "license_tier": "A"},
+      {"stage": "filter_and_kinematics", "model_hash": "none", "license_tier": "A"}
+    ],
+    "filter_spec_version": "0.1.0",
+    "calibration_id_or_none": "calibration-dlt",
+    "coordinate_revision_id": "coordinates-raw"
+  },
+  "events": [
+    {"event_id": "run_initial_contact", "frame_index": 24, "timestamp_sec": 0.2, "detection_mode": "manual", "side": "right"},
+    {"event_id": "run_toe_off", "frame_index": 55, "timestamp_sec": 0.458333, "detection_mode": "automatic", "side": "right"},
+    {"event_id": "run_next_initial_contact", "frame_index": 108, "timestamp_sec": 0.9, "detection_mode": "manual", "side": "right"}
+  ],
+  "scalar_metrics": [
+    {
+      "metric_id": "run_knee_flexion_extension_angle",
+      "event_id": "run_initial_contact",
+      "value_or_null": 18,
+      "unit": "deg",
+      "anatomical_plane": "sagittal",
+      "missing_reason_or_null": null,
+      "side": "right"
+    },
+    {
+      "metric_id": "run_ankle_dorsiflexion_plantarflexion_angle",
+      "event_id": "run_initial_contact",
+      "value_or_null": null,
+      "unit": "deg",
+      "anatomical_plane": "sagittal",
+      "missing_reason_or_null": "occluded",
+      "side": "right"
+    }
+  ],
+  "normalized_waveforms": [
+    {
+      "metric_id": "run_knee_flexion_extension_angle",
+      "interval_id": "run_stride",
+      "unit": "deg",
+      "anatomical_plane": "sagittal",
+      "side": "right",
+      "points": [
+        {"normalized_time_fraction": 0, "value": 18},
+        {"normalized_time_fraction": 0.4, "value": 43},
+        {"normalized_time_fraction": 100, "value": 16}
+      ]
+    }
+  ]
+}

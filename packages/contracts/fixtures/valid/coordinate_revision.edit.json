@@ -1,0 +1,14 @@
+{
+  "contract_version": "0.1.0",
+  "revision_id": "coordinates-1",
+  "expected_head": "coordinates-raw",
+  "parent_revision_id": "coordinates-raw",
+  "operation": "edit",
+  "edits": [
+    {
+      "view_id": "side",
+      "frame_index": 2,
+      "landmark": {"landmark_id": "right_knee", "x": 991, "y": 707, "confidence": null, "source": "manual_edit", "missing_reason": null}
+    }
+  ]
+}

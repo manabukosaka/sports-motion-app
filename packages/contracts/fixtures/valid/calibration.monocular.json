@@ -1,0 +1,6 @@
+{
+  "contract_version": "0.1.0",
+  "calibration_id": "calibration-monocular-reference",
+  "mode": "monocular_reference",
+  "view_id": "side"
+}
