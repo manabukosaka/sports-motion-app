@@ -1,0 +1,12 @@
+{
+  "dataset_version": "1.0.0",
+  "held_out_reprojection_px_lt": 2.0,
+  "dlt_known_distance_rmse_m_lt": 0.01,
+  "worst_angle_rmse_deg_lt": 5.0,
+  "bone_length_sd_mm_lt": 15.0,
+  "zero_phase_shift_frames_eq": 0,
+  "recompute_720_frames_ms_lt": 5000,
+  "upper_peak_relative_error_lt": 0.15,
+  "upper_peak_attenuation_improvement_gt": 0.03,
+  "upper_peak_timing_error_frames_lte": 2
+}
