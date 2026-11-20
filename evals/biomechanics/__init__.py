@@ -1,0 +1,1 @@
+"""Synthetic biomechanics regression fixtures."""

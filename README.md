@@ -16,6 +16,8 @@
 | [ADR 索引](./docs/adr/README.md) | アーキテクチャ決定記録と記載テンプレート |
 | [ADR-0006](./docs/adr/0006-tech-stack-and-contracts.md) | 技術スタックと共有データ契約 |
 | [packages/contracts/](./packages/contracts/) | 共有 JSON Schema と検証用フィクスチャ |
+| [services/motion-engine/](./services/motion-engine/) | 校正、3D 再構成、フィルタ、運動学の Python エンジン |
+| [evals/biomechanics/](./evals/biomechanics/) | 幾何不変条件テストと合成動作の精度・性能回帰評価 |
 
 ## エージェント駆動開発ハーネス
 
