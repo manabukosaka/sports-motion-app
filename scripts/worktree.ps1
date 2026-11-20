@@ -30,6 +30,23 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# A redirected -File invocation needs plain UTF-8 lines outside the host formatter.
+$writeToStdout = [Console]::IsOutputRedirected -and
+    $MyInvocation.ScriptLineNumber -eq 0 -and $MyInvocation.InvocationName -eq $PSCommandPath
+if ($writeToStdout) {
+    [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+}
+
+function Write-WorktreeResult {
+    param([string]$Text)
+
+    if ($writeToStdout) {
+        [Console]::Out.WriteLine($Text)
+    } else {
+        $Text
+    }
+}
+
 function Invoke-Executable {
     param([string]$Executable, [string[]]$Arguments)
 
@@ -245,15 +262,15 @@ try {
                 }
                 $null = Invoke-Executable git $addArgs
             }
-            "WORKTREE_PATH=$path"
-            "BRANCH=$branch"
+            Write-WorktreeResult "WORKTREE_PATH=$path"
+            Write-WorktreeResult "BRANCH=$branch"
             if ($orcaManaged) {
-                'ORCA_MANAGED=true'
+                Write-WorktreeResult 'ORCA_MANAGED=true'
                 if ($Agent) {
-                    'AGENT_LAUNCHED=true'
+                    Write-WorktreeResult 'AGENT_LAUNCHED=true'
                 }
             } else {
-                'ORCA_MANAGED=false'
+                Write-WorktreeResult 'ORCA_MANAGED=false'
             }
         }
         'launch' {
@@ -268,15 +285,15 @@ try {
                 $launchArgs += '--focus'
             }
             $launched = Invoke-Orca ($launchArgs + '--json')
-            "WORKTREE_PATH=$($target.Path)"
-            "AGENT=$agentId"
+            Write-WorktreeResult "WORKTREE_PATH=$($target.Path)"
+            Write-WorktreeResult "AGENT=$agentId"
             $sessionId = if ($launched.outcome.sessionId) { $launched.outcome.sessionId } else { $launched.sessionId }
             if ($sessionId) {
-                "ORCA_SESSION_ID=$sessionId"
+                Write-WorktreeResult "ORCA_SESSION_ID=$sessionId"
             }
         }
         'path' {
-            $target.Path
+            Write-WorktreeResult $target.Path
         }
         'list' {
             $rows = foreach ($worktree in $worktrees) {
@@ -287,7 +304,7 @@ try {
                     Dirty = if (Test-WorktreeDirty $worktree.Path) { 'dirty' } else { 'clean' }
                 }
             }
-            ($rows | Format-Table -AutoSize | Out-String -Width 4096).Trim()
+            Write-WorktreeResult ($rows | Format-Table -AutoSize | Out-String -Width 4096).Trim()
         }
         'finish' {
             if ($target -eq $primary) {
@@ -352,7 +369,7 @@ if ($Command -eq 'start' -and -not $NoGh) {
     if (Get-Command gh -ErrorAction SilentlyContinue) {
         try {
             $metadata = Invoke-Executable gh @('issue', 'view', $Issue, '--json', 'number,title,state,url')
-            "ISSUE=$($metadata -join '')"
+            Write-WorktreeResult "ISSUE=$($metadata -join '')"
         } catch {
             Write-Warning "Could not look up issue #$Issue with gh. $($_.Exception.Message)"
         }

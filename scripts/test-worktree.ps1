@@ -13,11 +13,28 @@ function Invoke-TestGit {
 function Invoke-Worktree {
     param([string[]]$Arguments)
 
-    $ErrorActionPreference = 'Continue'
-    $output = & $powerShell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $worktreeScript @Arguments 2>&1
-    [pscustomobject]@{
-        ExitCode = $LASTEXITCODE
-        Output = ($output | ForEach-Object { "$_" }) -join "`n"
+    $quotedArgs = ($Arguments | ForEach-Object { '"{0}"' -f $_ }) -join ' '
+    $info = [Diagnostics.ProcessStartInfo]::new(
+        $powerShell, "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$worktreeScript`" $quotedArgs"
+    )
+    $info.WorkingDirectory = (Get-Location).ProviderPath
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+    $info.StandardOutputEncoding = [Text.Encoding]::UTF8
+    $info.StandardErrorEncoding = [Text.Encoding]::UTF8
+    $process = [Diagnostics.Process]::Start($info)
+    try {
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $stderr = $process.StandardError.ReadToEndAsync()
+        $process.WaitForExit()
+        [pscustomobject]@{
+            ExitCode = $process.ExitCode
+            Output = ($stdout.Result + $stderr.Result).TrimEnd("`r", "`n").Replace("`r`n", "`n")
+        }
+    } finally {
+        $process.Dispose()
     }
 }
 
@@ -133,9 +150,10 @@ $result = switch ($command) {
 
 $tempRoot = (Resolve-Path -LiteralPath $env:TEMP).ProviderPath
 $sandbox = Join-Path $tempRoot "worktree-test-$([guid]::NewGuid().ToString('N'))"
-$repo = Join-Path $sandbox ('repo with spaces ' + [char]0x52D5)
+$repo = Join-Path $sandbox ('repo with spaces ' + [char]0x52D5 + ' ' + ('x' * 48))
 $worktreeRoot = "$repo.worktrees"
 $expectedPath = Join-Path $worktreeRoot 'issue-42-camera-pose-v2'
+Assert-True ($expectedPath.Length -gt 140) 'The redirected output fixture requires a path longer than 140 characters.'
 $expectedBranch = 'feat/42-camera-pose-v2'
 $worktreeScript = Join-Path $PSScriptRoot 'worktree.ps1'
 $powerShell = (Get-Process -Id $PID).Path
@@ -146,7 +164,7 @@ try {
     [Console]::OutputEncoding = [Text.Encoding]::UTF8
     foreach ($name in (Invoke-TestGit @('rev-parse', '--local-env-vars'))) {
         $savedGitEnv[$name] = [Environment]::GetEnvironmentVariable($name)
-        [Environment]::SetEnvironmentVariable($name, $null)
+        Set-Item -LiteralPath "Env:$name" -Value $null
     }
     $savedGitEnv['GIT_CONFIG_NOSYSTEM'] = $env:GIT_CONFIG_NOSYSTEM
     $savedGitEnv['GIT_CONFIG_GLOBAL'] = $env:GIT_CONFIG_GLOBAL
@@ -191,8 +209,8 @@ try {
         $escapedPath = [regex]::Escape($expectedPath)
         $escapedBranch = [regex]::Escape($expectedBranch)
         Assert-True ($result.Output -match '(?m)^IssueNumber\s+Branch\s+Path\s+Dirty\s*$') "Missing list headers.`n$($result.Output)"
-        Assert-True ($result.Output -match "(?m)^-\s+main\s+$escapedRepo\s+clean\s*$") "Missing clean main worktree.`n$($result.Output)"
-        Assert-True ($result.Output -match "(?m)^42\s+$escapedBranch\s+$escapedPath\s+clean\s*$") "Missing clean issue worktree.`n$($result.Output)"
+        Assert-True ($result.Output -match "(?m)^- +main +$escapedRepo +clean *$") "Missing clean main worktree.`n$($result.Output)"
+        Assert-True ($result.Output -match "(?m)^42 +$escapedBranch +$escapedPath +clean *$") "Missing clean issue worktree.`n$($result.Output)"
         Write-Output 'PASS c) list shows both worktrees and their status'
 
         $result = Invoke-Worktree @('start', '-Issue', '42', '-Slug', 'different', '-NoGh', '-NoOrca')
@@ -237,7 +255,7 @@ try {
 } finally {
     [Console]::OutputEncoding = $consoleEncoding
     foreach ($name in $savedGitEnv.Keys) {
-        [Environment]::SetEnvironmentVariable($name, $savedGitEnv[$name])
+        Set-Item -LiteralPath "Env:$name" -Value $savedGitEnv[$name]
     }
     if (Test-Path -LiteralPath $sandbox) {
         $resolvedSandbox = (Resolve-Path -LiteralPath $sandbox).ProviderPath
