@@ -61,6 +61,7 @@ jobs:
       - run: pnpm run lint
       - run: pnpm run check:boundaries
       - run: pnpm run check:boundaries:self-test
+      - run: pnpm run test:evidence
       - run: pnpm run test
 
   verify-lifecycle:

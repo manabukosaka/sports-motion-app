@@ -49,8 +49,8 @@
 - **No Unchecked Parallelism**: 現在の Trust Level（`docs/04-agent-harness-design.md` §3）を超えた無秩序な並列実装を行わない。
 
 ## 現在の開発フェーズ
-- **現在地**: Phase 2（基盤・ハーネス構築／Walking Skeleton）
-- **現在の Trust Level**: Level 1（Verified Single）
+- **現在地**: Phase 3（MVP コア機能開発 V1.0）
+- **現在の Trust Level**: Level 2（Bounded Parallel — 境界分離された最大2並列 Worktree、各 Worktree で `codex`＋`antigravity` 2セッション必須）
 - **ローカル検証コマンド**（リポジトリルートで実行）
   - `uv run --no-project --with jsonschema python scripts/test-contracts.py`
   - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-evidence-catalog.ps1`（Windows。Linux では `pwsh -NoProfile -File scripts/test-evidence-catalog.ps1`）
@@ -66,6 +66,7 @@
   - `pnpm run check:boundaries:self-test`
   - `pnpm run test:contracts`
   - `pnpm run test:g3`
+  - `pnpm run test:evidence`
   - `pnpm run test:vertical-slice`
   - `pnpm run verify:lifecycle`
   - `pnpm exec playwright install --only-shell chromium`（共有ビュー・Walking Skeleton E2E 検証の初回のみ）

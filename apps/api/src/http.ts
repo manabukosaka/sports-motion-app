@@ -183,12 +183,17 @@ export async function handleApiRequest(
       (collection === "trial-videos" || collection === "trials") &&
       segments.length === 5 &&
       action === "analyze";
+    const checkpoints =
+      request.method === "GET" &&
+      collection === "evidence-snapshots" &&
+      segments.length === 5 &&
+      action === "checkpoints";
     const resource = analyze ? "TrialVideo" : collection && resources.get(collection);
     if (
       route !== "teams" ||
       !teamId ||
       !resource ||
-      (segments.length > 4 && !analyze) ||
+      (segments.length > 4 && !analyze && !checkpoints) ||
       [...query].some(
         ([key, value]) =>
           !((key === "teamId" && value === teamId) || (key === "id" && value === id)),
@@ -216,6 +221,8 @@ export async function handleApiRequest(
       );
       result = analysis?.receipt;
       status = analysis?.created ? 201 : 200;
+    } else if (checkpoints && id) {
+      result = policy.readEvidenceCheckpoints(userId, teamId, id);
     } else if (request.method === "GET") {
       result = id
         ? policy.read(userId, teamId, resource, id)

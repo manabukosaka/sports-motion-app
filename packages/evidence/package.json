@@ -1,0 +1,23 @@
+{
+  "name": "@sports-motion/evidence",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/packages/evidence/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sports-motion/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "fast-check": "4.5.3"
+  }
+}
