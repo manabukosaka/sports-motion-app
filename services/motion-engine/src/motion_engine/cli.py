@@ -16,6 +16,7 @@ from .contracts import (
     Contract,
     CoordinateRevision,
     DLTCalibration,
+    Fraction,
     Matrix3,
     MonocularReferenceCalibration,
     Movement,
@@ -24,7 +25,8 @@ from .contracts import (
     SemVer,
     StereoCalibration,
 )
-from .pipeline import run_calibrated_pipeline, run_monocular_pipeline
+from .mediapipe_adapter import MediaPipeLandmarkerBackend, MediaPipePoseAdapter
+from .pipeline import PluginArtifact, run_calibrated_pipeline, run_monocular_pipeline
 
 ROOT = Path(__file__).resolve().parents[4]
 EVIDENCE = ROOT / "docs/evidence"
@@ -64,6 +66,15 @@ class MonocularAnalyzeRequest(AnalysisContext):
     mode: Literal["monocular"]
     view: Pose2DSequence
     calibration: MonocularReferenceCalibration
+
+
+class VideoAnalyzeRequest(AnalysisContext):
+    video_path: NonBlank
+    calibration: MonocularReferenceCalibration
+    model_path: NonBlank
+    manifest_path: NonBlank
+    expected_plugin_version: SemVer | None = None
+    min_visibility: Fraction = 0.5
 
 
 REQUEST = TypeAdapter(AnalyzeRequest | MonocularAnalyzeRequest)
@@ -111,7 +122,11 @@ class PipelineOptions(TypedDict):
     events: list[CaptureEvent]
 
 
-def analyze(request: AnalyzeRequest | MonocularAnalyzeRequest) -> dict[str, object]:
+def analyze(
+    request: AnalyzeRequest | MonocularAnalyzeRequest | VideoAnalyzeRequest,
+    *,
+    video_backend: MediaPipeLandmarkerBackend | None = None,
+) -> dict[str, object]:
     movement: Movement
     if request.movement == "jump_landing":
         has_drop_jump = any(
@@ -132,7 +147,31 @@ def analyze(request: AnalyzeRequest | MonocularAnalyzeRequest) -> dict[str, obje
         "events": request.events,
     }
     try:
-        if isinstance(request, MonocularAnalyzeRequest):
+        if isinstance(request, VideoAnalyzeRequest):
+            video_path = Path(request.video_path)
+            if not video_path.is_file():
+                raise InvalidAnalysisInput("video_path must be an existing file")
+            model_path = Path(request.model_path)
+            try:
+                result = run_monocular_pipeline(
+                    video_path,
+                    request.calibration,
+                    estimator=MediaPipePoseAdapter(
+                        model_path if video_backend is None else video_backend,
+                        min_visibility=request.min_visibility,
+                    ),
+                    artifacts={
+                        "reconstructor_3d": PluginArtifact(
+                            Path(request.manifest_path),
+                            model_path,
+                            request.expected_plugin_version,
+                        )
+                    },
+                    **options,
+                )
+            except OSError as error:
+                raise InvalidAnalysisInput(str(error)) from error
+        elif isinstance(request, MonocularAnalyzeRequest):
             result = run_monocular_pipeline(
                 request.view, request.calibration, **options
             )
@@ -167,10 +206,16 @@ def analyze(request: AnalyzeRequest | MonocularAnalyzeRequest) -> dict[str, obje
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["analyze"])
-    parser.parse_args()
+    parser.add_argument("command", choices=["analyze", "analyze-video"])
+    args = parser.parse_args()
     try:
-        result = analyze(REQUEST.validate_json(sys.stdin.buffer.read()))
+        payload = sys.stdin.buffer.read()
+        request = (
+            VideoAnalyzeRequest.model_validate_json(payload)
+            if args.command == "analyze-video"
+            else REQUEST.validate_json(payload)
+        )
+        result = analyze(request)
         print(json.dumps(result, allow_nan=False))
     except (ValidationError, InvalidAnalysisInput):
         print(json.dumps({"error": "invalid_analysis_input"}), file=sys.stderr)
