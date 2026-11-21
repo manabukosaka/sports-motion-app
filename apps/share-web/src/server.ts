@@ -8,6 +8,7 @@ interface ShareWebOptions {
   apiBaseUrl: string;
   host?: string;
   port?: number;
+  demoComparisonHtml?: () => string;
 }
 
 async function shareResource(request: IncomingMessage, apiBaseUrl: string) {
@@ -82,10 +83,14 @@ async function handleRequest(
   request: IncomingMessage,
   response: ServerResponse,
   apiBaseUrl: string,
+  demoComparisonHtml?: () => string,
 ) {
   let resource: Awaited<ReturnType<typeof shareResource>>;
   try {
-    resource = await shareResource(request, apiBaseUrl);
+    resource =
+      demoComparisonHtml && request.method === "GET" && request.url === "/demo/compare"
+        ? { contentType: "text/html; charset=utf-8", body: demoComparisonHtml() }
+        : await shareResource(request, apiBaseUrl);
   } catch {
     // Route and upstream failures have the same public response.
   }
@@ -102,10 +107,11 @@ export async function startShareWebServer({
   apiBaseUrl,
   host = "127.0.0.1",
   port = 0,
+  demoComparisonHtml,
 }: ShareWebOptions) {
   const baseUrl = apiBaseUrl.replace(/\/+$/u, "");
   const server = createServer((request, response) => {
-    void handleRequest(request, response, baseUrl);
+    void handleRequest(request, response, baseUrl, demoComparisonHtml);
   });
   server.listen(port, host);
   await once(server, "listening");
