@@ -1,17 +1,27 @@
 import { type KeyObject, randomUUID } from "node:crypto";
 import {
+  type CoordinateRevision,
   type EvidenceCatalog,
   type KinematicMetrics,
   type Pose3DSequence,
   type ShareReportSnapshot,
   validateContract,
 } from "@sports-motion/contracts";
+import { replayCoordinateHistory } from "@sports-motion/editing";
 import {
   type CoachingCheckpoint,
   compareMetricsAgainstCatalog,
   loadEvidenceCatalog,
 } from "@sports-motion/evidence";
-import { AnalysisConflict, type AnalysisReceipt, parseAnalysisSubmission } from "./analysis.js";
+import {
+  AnalysisConflict,
+  type AnalysisInputs,
+  type AnalysisReceipt,
+  parseAnalysisSubmission,
+  parseRevisionCommit,
+  type RevisionCommitReceipt,
+  validateEditHistory,
+} from "./analysis.js";
 import { jsonDigest } from "./canonical-json.js";
 import { type ShareTokenClaims, signShareToken, verifyShareToken } from "./share-token.js";
 import type { StateStore } from "./state-store.js";
@@ -151,6 +161,8 @@ interface MotionJob {
   jobId: string;
   captureDigest: string;
   requestDigest: string;
+  captureInputs?: AnalysisInputs;
+  coordinateCommit?: { revision: CoordinateRevision; recomputeMs: number };
 }
 
 function checkMotionJob(jobs: Iterable<MotionJob>, job: MotionJob) {
@@ -216,6 +228,46 @@ function savedAnalysis(
     kinematic_metrics: analysis.summary,
     selected_cutoffs_hz: analysis.selectedCutoffsHz,
     ...evidenceReceiptFields(evidence),
+  };
+}
+
+function revisionHistory(state: AccessState, trial: TrialVideo) {
+  const jobs = (state.motionJobs ?? []).filter(
+    ({ teamId, trialId }) => teamId === trial.teamId && trialId === trial.id,
+  );
+  const base = jobs.find(({ captureInputs }) => captureInputs);
+  if (!base?.captureInputs || !savedAnalysis(state, base, trial)) {
+    return;
+  }
+  const inputs = base.captureInputs;
+  const revisions = [...(inputs.revisions ?? [])];
+  for (const job of jobs) {
+    if (job.coordinateCommit) {
+      revisions.push(job.coordinateCommit.revision);
+    }
+  }
+  const { currentHead } = replayCoordinateHistory(
+    revisions,
+    inputs.calibration.contract_version,
+    inputs.raw_revision_id,
+  );
+  return { base, inputs, jobs, revisions, currentHead: currentHead ?? inputs.raw_revision_id };
+}
+
+function revisionReceipt(
+  analysis: AnalysisReceipt,
+  coordinateRevisionId: string,
+  currentHead: string,
+  recomputeMs: number,
+): RevisionCommitReceipt {
+  return {
+    analysis_revision_id: analysis.analysis_revision_id,
+    evidence_snapshot_id: analysis.evidence_snapshot_id,
+    coordinate_revision_id: coordinateRevisionId,
+    current_head: currentHead,
+    recompute_ms: recomputeMs,
+    pose3d: analysis.pose3d,
+    kinematic_metrics: analysis.kinematic_metrics,
   };
 }
 
@@ -376,6 +428,10 @@ export class AccessPolicy {
       job: MotionJob;
       result: Promise<WorkerAnalysisResult>;
     }
+  >();
+  private readonly pendingRevisionJobs = new Map<
+    string,
+    { job: MotionJob; result: Promise<{ analysis: WorkerAnalysisResult; recomputeMs: number }> }
   >();
 
   constructor(
@@ -544,10 +600,25 @@ export class AccessPolicy {
     const existing = checkMotionJob(state.motionJobs ?? [], job);
     if (existing) {
       const receipt = savedAnalysis(state, existing, trial);
+      if (
+        receipt &&
+        !state.motionJobs?.some(
+          (saved) => saved.teamId === teamId && saved.trialId === trialId && saved.captureInputs,
+        )
+      ) {
+        this.store.update((draft) => {
+          const saved = checkMotionJob(draft.motionJobs ?? [], job);
+          if (saved) {
+            saved.captureInputs = inputs;
+          }
+        });
+      }
       return receipt && { receipt, created: false };
     }
     checkMotionJob(
-      Array.from(this.pendingMotionJobs.values(), ({ job }) => job),
+      [...this.pendingMotionJobs.values(), ...this.pendingRevisionJobs.values()].map(
+        ({ job }) => job,
+      ),
       job,
     );
     const key = JSON.stringify([teamId, trialId, analysis_job_id]);
@@ -573,49 +644,202 @@ export class AccessPolicy {
           return receipt && { receipt, created: false };
         }
         if (
-          inTeam(draft.analyses, ids.analysis_revision_id, teamId) ||
-          inTeam(draft.evidence, ids.evidence_snapshot_id, teamId)
+          !draft.motionJobs?.some(
+            (saved) => saved.teamId === teamId && saved.trialId === trialId && saved.captureInputs,
+          )
         ) {
-          throw new AnalysisConflict("Analysis or evidence ID is already taken");
+          job.captureInputs = inputs;
         }
-        const scope = { teamId, trialId, athleteId: trial.athleteId };
-        const catalog = this.evidenceCatalog;
-        const { evidence_comparisons, checkpoints } = compareMetricsAgainstCatalog(
-          result.kinematic_metrics,
-          catalog,
-        );
-        draft.analyses.push({
-          ...scope,
-          id: ids.analysis_revision_id,
-          summary: result.kinematic_metrics,
-          pose3d: result.pose3d,
-          calibration: inputs.calibration,
-          selectedCutoffsHz: result.selected_cutoffs_hz,
-        });
-        const evidence: EvidenceRecord = {
-          ...scope,
-          id: ids.evidence_snapshot_id,
-          analysisRevisionId: ids.analysis_revision_id,
-          contractVersion: result.kinematic_metrics.contract_version,
-          registryVersion: catalog.evidence_registry_version,
-          comparisons: evidence_comparisons,
-          checkpoints,
-          nonDiagnostic: catalog.disclaimer_policy.non_diagnostic_flag,
-          disclaimerTextJa: catalog.disclaimer_policy.user_facing_text_ja,
-        };
-        draft.evidence.push(evidence);
-        draft.motionJobs ??= [];
-        draft.motionJobs.push(job);
-        return {
-          receipt: { ...result, ...ids, ...evidenceReceiptFields(evidence) },
-          created: true,
-        };
+        const receipt = this.recordAnalysis(draft, trial, job, inputs.calibration, result);
+        return { receipt, created: true };
       });
     } finally {
       if (!pending) {
         this.pendingMotionJobs.delete(key);
       }
     }
+  }
+
+  async commitCoordinateRevision(
+    userId: string | undefined,
+    teamId: string,
+    trialId: string,
+    submission: unknown,
+    worker: MotionWorker,
+  ) {
+    const state = this.store.read();
+    const trial = writableTrial(state, userId, teamId, trialId);
+    const history = trial && revisionHistory(state, trial);
+    if (!trial || !history) {
+      return;
+    }
+    const { revision, analysisJobId } = parseRevisionCommit(submission);
+    const revisionId = revision.revision_id;
+    const revisionDigest = jsonDigest(revision);
+    const repeat = (snapshot: AccessState, current: typeof history) => {
+      const saved = current.jobs.find(
+        (job) => job.coordinateCommit?.revision.revision_id === revisionId,
+      );
+      if (!saved?.coordinateCommit) {
+        return;
+      }
+      if (jsonDigest(saved.coordinateCommit.revision) !== revisionDigest) {
+        throw new AnalysisConflict("Coordinate revision ID already has different content");
+      }
+      const analysis = savedAnalysis(snapshot, saved, trial);
+      if (!analysis) {
+        throw new Error("Committed coordinate revision is missing its analysis");
+      }
+      return {
+        receipt: revisionReceipt(
+          analysis,
+          revisionId,
+          current.currentHead,
+          saved.coordinateCommit.recomputeMs,
+        ),
+        created: false,
+      };
+    };
+    const repeated = repeat(state, history);
+    if (repeated) {
+      return repeated;
+    }
+    if (
+      revision.expected_head !== history.currentHead ||
+      revision.parent_revision_id !== history.currentHead ||
+      revisionId === history.inputs.raw_revision_id ||
+      history.revisions.some(({ revision_id }) => revision_id === revisionId)
+    ) {
+      throw new AnalysisConflict("Coordinate revision does not match the current head");
+    }
+
+    const job: MotionJob = {
+      teamId,
+      trialId,
+      captureId: history.base.captureId,
+      captureDigest: history.base.captureDigest,
+      jobId: analysisJobId,
+      requestDigest: jsonDigest(["coordinate_revision", revisionDigest]),
+    };
+    const key = JSON.stringify([teamId, trialId]);
+    const pending = this.pendingRevisionJobs.get(key);
+    if (
+      (pending && pending.job.requestDigest !== job.requestDigest) ||
+      checkMotionJob(state.motionJobs ?? [], job) ||
+      checkMotionJob(
+        Array.from(this.pendingMotionJobs.values(), ({ job }) => job),
+        job,
+      )
+    ) {
+      throw new AnalysisConflict("Another analysis or revision already uses this head or job ID");
+    }
+    const revisionJob = pending?.job ?? job;
+    const { inputs } = history;
+    const revisions = [...history.revisions, revision];
+    const request = {
+      ...inputs,
+      revisions,
+      analysis_revision_id: motionIds(revisionJob).analysis_revision_id,
+    };
+    if (!pending) {
+      validateEditHistory(inputs, revisions);
+    }
+    const computation =
+      pending?.result ??
+      Promise.resolve().then(async () => {
+        const start = performance.now();
+        const analysis = await worker.analyze(request);
+        return { analysis, recomputeMs: performance.now() - start };
+      });
+    if (!pending) {
+      this.pendingRevisionJobs.set(key, { job: revisionJob, result: computation });
+    }
+    try {
+      const { analysis, recomputeMs } = await computation;
+      if (!validateWorkerResult(analysis, request)) {
+        throw new Error("Motion worker returned an invalid analysis result");
+      }
+      return this.store.update((draft) => {
+        if (writableTrial(draft, userId, teamId, trialId)?.athleteId !== trial.athleteId) {
+          return;
+        }
+        const current = revisionHistory(draft, trial);
+        if (!current) {
+          return;
+        }
+        const saved = repeat(draft, current);
+        if (saved) {
+          return saved;
+        }
+        if (
+          current.currentHead !== history.currentHead ||
+          checkMotionJob(draft.motionJobs ?? [], revisionJob)
+        ) {
+          throw new AnalysisConflict("Coordinate history advanced during recomputation");
+        }
+        const result = this.recordAnalysis(
+          draft,
+          trial,
+          { ...revisionJob, coordinateCommit: { revision, recomputeMs } },
+          inputs.calibration,
+          analysis,
+        );
+        return {
+          receipt: revisionReceipt(result, revisionId, revisionId, recomputeMs),
+          created: true,
+        };
+      });
+    } finally {
+      if (!pending) {
+        this.pendingRevisionJobs.delete(key);
+      }
+    }
+  }
+
+  private recordAnalysis(
+    draft: AccessState,
+    trial: TrialVideo,
+    job: MotionJob,
+    calibration: AnalysisInputs["calibration"],
+    result: WorkerAnalysisResult,
+  ): AnalysisReceipt {
+    const ids = motionIds(job);
+    const { teamId, athleteId, id: trialId } = trial;
+    if (
+      inTeam(draft.analyses, ids.analysis_revision_id, teamId) ||
+      inTeam(draft.evidence, ids.evidence_snapshot_id, teamId)
+    ) {
+      throw new AnalysisConflict("Analysis or evidence ID is already taken");
+    }
+    const scope = { teamId, trialId, athleteId };
+    const catalog = this.evidenceCatalog;
+    const { evidence_comparisons, checkpoints } = compareMetricsAgainstCatalog(
+      result.kinematic_metrics,
+      catalog,
+    );
+    draft.analyses.push({
+      ...scope,
+      id: ids.analysis_revision_id,
+      summary: result.kinematic_metrics,
+      pose3d: result.pose3d,
+      calibration,
+      selectedCutoffsHz: result.selected_cutoffs_hz,
+    });
+    const evidence: EvidenceRecord = {
+      ...scope,
+      id: ids.evidence_snapshot_id,
+      analysisRevisionId: ids.analysis_revision_id,
+      contractVersion: result.kinematic_metrics.contract_version,
+      registryVersion: catalog.evidence_registry_version,
+      comparisons: evidence_comparisons,
+      checkpoints,
+      nonDiagnostic: catalog.disclaimer_policy.non_diagnostic_flag,
+      disclaimerTextJa: catalog.disclaimer_policy.user_facing_text_ja,
+    };
+    draft.evidence.push(evidence);
+    draft.motionJobs ??= [];
+    draft.motionJobs.push(job);
+    return { ...result, ...ids, ...evidenceReceiptFields(evidence) };
   }
 
   issue(userId: string | undefined, teamId: string, fields: Fields) {

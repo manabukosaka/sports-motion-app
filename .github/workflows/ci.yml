@@ -63,6 +63,7 @@ jobs:
       - run: pnpm run check:boundaries:self-test
       - run: pnpm run test:evidence
       - run: pnpm run test:export
+      - run: pnpm run test:editing
       - run: pnpm run test
 
   verify-lifecycle:
@@ -79,6 +80,9 @@ jobs:
 
   vertical-slice-api-worker:
     runs-on: ubuntu-latest
+    env:
+      UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/sports-motion-vertical-slice-venv
+      PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
