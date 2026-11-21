@@ -2,6 +2,13 @@ import { type FrameIndex, type Image2DPoint, validateContract } from "@sports-mo
 
 export * from "./coaching-studio.js";
 export * from "./editing-studio.js";
+export { SportsMotionApp, type SportsMotionAppProps } from "./ui/App.js";
+export type { DisclosureMode } from "./ui/mode.js";
+export * from "./ui/screens/CaptureScreen.js";
+export * from "./ui/screens/ComparisonScreen.js";
+export * from "./ui/screens/EditingStudioScreen.js";
+export * from "./ui/screens/ShareScreen.js";
+export * from "./ui/screens/TeamDashboardScreen.js";
 export * from "./walking-skeleton.js";
 
 export function readImagePoint(
