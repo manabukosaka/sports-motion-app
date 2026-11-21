@@ -15,7 +15,7 @@ import numpy as np
 from jsonschema import Draft202012Validator, FormatChecker
 from motion_engine.contracts import Contract, DLTCalibration, StereoCalibration
 from motion_engine.filtering import FilterSettings, butterworth_lowpass
-from motion_engine.kinematics import METRICS
+from motion_engine.kinematics import LANDING_EVENTS, METRICS
 from motion_engine.pipeline import PipelineResult, run_calibrated_pipeline
 from referencing import Registry, Resource
 
@@ -172,17 +172,31 @@ def finite_metrics(
     predicted = result.angle_series_deg
     if predicted.shape != case.angle_deg.shape or not np.isfinite(predicted).all():
         raise ValueError(f"{case.movement}: invalid or incomplete angle series")
-    if (
-        result.pose.bone_length_stability_mm is None
-        or len(result.metrics.normalized_waveforms) != 1
-    ):
+    spec = METRICS[case.movement]
+    primary_waveforms = [
+        wave
+        for wave in result.metrics.normalized_waveforms
+        if wave.metric_id == spec.metric_id and wave.side == "right"
+    ]
+    if result.pose.bone_length_stability_mm is None or len(primary_waveforms) != 1:
         raise ValueError(
             f"{case.movement}: expected bone length and normalized waveform"
         )
-    expected_scalars = len(case.events) + (case.movement == "baseball_pitching")
-    if len(result.metrics.scalar_metrics) != expected_scalars or any(
-        metric.value_or_null is None for metric in result.metrics.scalar_metrics
-    ):
+    required_events = {
+        event.event_id
+        for event in case.events
+        if case.movement not in LANDING_EVENTS
+        or event.event_id in LANDING_EVENTS[case.movement]
+    }
+    required = {(spec.metric_id, event) for event in required_events}
+    if case.movement == "baseball_pitching":
+        required.add(("pitch_elbow_peak_extension_angular_velocity", "pitch_cycle"))
+    measured = {
+        (metric.metric_id, metric.event_id)
+        for metric in result.metrics.scalar_metrics
+        if metric.value_or_null is not None and metric.side == "right"
+    }
+    if not required <= measured:
         raise ValueError(f"{case.movement}: unexpected missing event metric")
     if not all(
         any(

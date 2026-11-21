@@ -68,9 +68,15 @@ def _select_cutoff(
     tracks: Sequence[tuple[FloatArray, float]], band: CutoffBand
 ) -> float:
     upper_hz = min(band.maximum_hz, min(hz for _, hz in tracks) * 0.45)
-    if not band.minimum_hz < upper_hz:
-        raise ValueError("cutoff band has no usable frequencies below Nyquist")
-    candidates = np.linspace(band.minimum_hz, upper_hz, 25)
+    if not np.isfinite(upper_hz) or upper_hz <= 0:
+        raise ValueError("cutoff selection requires a positive finite sample rate")
+    # Preserve the band's relative width when the capture rate excludes it.
+    lower_hz = (
+        band.minimum_hz
+        if band.minimum_hz < upper_hz
+        else upper_hz * band.minimum_hz / band.maximum_hz
+    )
+    candidates = np.linspace(lower_hz, upper_hz, 25)
     sample_count = sum(values.size for values, _ in tracks)
     residuals = np.sqrt(
         np.array(

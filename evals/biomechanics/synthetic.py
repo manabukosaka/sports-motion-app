@@ -91,6 +91,19 @@ def fit_calibrations(rig: Rig) -> tuple[DLTCalibration, StereoCalibration]:
         (rig.project(checks, 0), rig.project(checks, 1)),
     )
 
+    observations = stereo_board_observations(rig)
+    stereo = fit_stereo_calibration(
+        "synthetic-stereo",
+        CONTRACT_VERSION,
+        rig.views,
+        IMAGE_SIZE,
+        observations[:7],
+        observations[7:],
+    )
+    return dlt, stereo
+
+
+def stereo_board_observations(rig: Rig) -> list[BoardObservation]:
     board = np.array(list(product(np.arange(9) * 0.08, np.arange(6) * 0.08, (0.0,))))
     board -= board.mean(axis=0)
     observations = []
@@ -106,15 +119,7 @@ def fit_calibrations(rig: Rig) -> tuple[DLTCalibration, StereoCalibration]:
         observations.append(
             BoardObservation(board, rig.project(world, 0), rig.project(world, 1))
         )
-    stereo = fit_stereo_calibration(
-        "synthetic-stereo",
-        CONTRACT_VERSION,
-        rig.views,
-        IMAGE_SIZE,
-        observations[:7],
-        observations[7:],
-    )
-    return dlt, stereo
+    return observations
 
 
 @dataclass(frozen=True)
@@ -300,6 +305,10 @@ def synthetic_motion(
     )
     spec = METRICS[movement]
     end_frame = min(count - 1, round(DURATION_SEC[movement] * fps))
+    annotated = [(spec.first, 0), (spec.last, end_frame)]
+    if movement == "dvj":
+        peak = int(np.argmax(angles[1:end_frame])) + 1
+        annotated.insert(1, ("dvj_peak_landing_flexion", peak))
     events = tuple(
         CaptureEvent(
             event_id=event_id,
@@ -308,7 +317,7 @@ def synthetic_motion(
             detection_mode="manual",
             side="right",
         )
-        for event_id, index in ((spec.first, 0), (spec.last, end_frame))
+        for event_id, index in annotated
     )
     return MotionCase(
         movement, fps, time, angles, landmarks, (views[0], views[1]), events, edit

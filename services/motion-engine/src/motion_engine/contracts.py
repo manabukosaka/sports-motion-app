@@ -293,9 +293,12 @@ class Calibration(Contract):
         return self
 
 
-class MonocularCalibration(Calibration):
+class MonocularReferenceCalibration(Calibration):
     mode: Literal["monocular_reference"]
     view_id: NonBlank
+
+
+MonocularCalibration = MonocularReferenceCalibration
 
 
 class TwoViewCalibration[V: StereoView](Calibration):

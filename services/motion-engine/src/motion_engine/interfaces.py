@@ -21,6 +21,23 @@ class Tracker2D(Protocol):
     def __call__(self, video: Path, /) -> Pose2DSequence: ...
 
 
+class Monocular3DEstimator(Protocol):
+    def __call__(
+        self,
+        observations: Pose2DSequence | None,
+        video: Path | None,
+        provenance: AnalysisProvenance,
+        /,
+    ) -> Pose3DSequence:
+        """Return hip-relative estimates on the capture clock.
+
+        Video models can decode frames with iter_video_frames. Revised Image2D
+        observations are supplied when available. Mark model-derived points as
+        tracker_raw when an Image2D edit did not change the predicted 3D point.
+        """
+        ...
+
+
 class CoordinateRevisionStage(Protocol):
     def __call__(
         self, raw: Pose2DSequence, revisions: list[CoordinateRevision], /

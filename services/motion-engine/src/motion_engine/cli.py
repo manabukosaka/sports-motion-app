@@ -3,11 +3,12 @@ import json
 import sys
 from functools import cache
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, TypedDict
 
+import numpy as np
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 from jsonschema import ValidationError as SchemaError
-from pydantic import Field, ValidationError
+from pydantic import Field, TypeAdapter, ValidationError
 from referencing import Registry, Resource
 
 from .contracts import (
@@ -15,13 +16,15 @@ from .contracts import (
     Contract,
     CoordinateRevision,
     DLTCalibration,
+    Matrix3,
+    MonocularReferenceCalibration,
     Movement,
     NonBlank,
     Pose2DSequence,
     SemVer,
     StereoCalibration,
 )
-from .pipeline import run_calibrated_pipeline
+from .pipeline import run_calibrated_pipeline, run_monocular_pipeline
 
 ROOT = Path(__file__).resolve().parents[4]
 EVIDENCE = ROOT / "docs/evidence"
@@ -37,12 +40,8 @@ def evidence_policy() -> tuple[str, str]:
     ]
 
 
-class AnalyzeRequest(Contract):
-    views: tuple[Pose2DSequence, Pose2DSequence]
-    calibration: Annotated[
-        DLTCalibration | StereoCalibration, Field(discriminator="mode")
-    ]
-    movement: Literal["baseball_pitching", "running", "jump_landing"]
+class AnalysisContext(Contract):
+    movement: Movement | Literal["jump_landing"]
     analysis_revision_id: NonBlank
     raw_revision_id: NonBlank
     revisions: list[CoordinateRevision] = Field(default_factory=list)
@@ -50,6 +49,24 @@ class AnalyzeRequest(Contract):
     evidence_registry_version: SemVer = Field(
         default_factory=lambda: evidence_policy()[0]
     )
+
+
+class AnalyzeRequest(AnalysisContext):
+    mode: Literal["calibrated"] = "calibrated"
+    views: tuple[Pose2DSequence, Pose2DSequence]
+    calibration: Annotated[
+        DLTCalibration | StereoCalibration, Field(discriminator="mode")
+    ]
+    world_basis: Matrix3 | None = None
+
+
+class MonocularAnalyzeRequest(AnalysisContext):
+    mode: Literal["monocular"]
+    view: Pose2DSequence
+    calibration: MonocularReferenceCalibration
+
+
+REQUEST = TypeAdapter(AnalyzeRequest | MonocularAnalyzeRequest)
 
 
 @cache
@@ -86,7 +103,15 @@ class InvalidAnalysisInput(ValueError):
     pass
 
 
-def analyze(request: AnalyzeRequest) -> dict[str, object]:
+class PipelineOptions(TypedDict):
+    movement: Movement
+    analysis_revision_id: str
+    raw_revision_id: str
+    revisions: list[CoordinateRevision]
+    events: list[CaptureEvent]
+
+
+def analyze(request: AnalyzeRequest | MonocularAnalyzeRequest) -> dict[str, object]:
     movement: Movement
     if request.movement == "jump_landing":
         has_drop_jump = any(
@@ -99,16 +124,27 @@ def analyze(request: AnalyzeRequest) -> dict[str, object]:
         movement = "dvj" if has_drop_jump else "cmj"
     else:
         movement = request.movement
+    options: PipelineOptions = {
+        "movement": movement,
+        "analysis_revision_id": request.analysis_revision_id,
+        "raw_revision_id": request.raw_revision_id,
+        "revisions": request.revisions,
+        "events": request.events,
+    }
     try:
-        result = run_calibrated_pipeline(
-            request.views,
-            request.calibration,
-            movement=movement,
-            analysis_revision_id=request.analysis_revision_id,
-            raw_revision_id=request.raw_revision_id,
-            revisions=request.revisions,
-            events=request.events,
-        )
+        if isinstance(request, MonocularAnalyzeRequest):
+            result = run_monocular_pipeline(
+                request.view, request.calibration, **options
+            )
+        else:
+            result = run_calibrated_pipeline(
+                request.views,
+                request.calibration,
+                world_basis=np.asarray(request.world_basis)
+                if request.world_basis is not None
+                else None,
+                **options,
+            )
     except ValidationError as error:
         raise RuntimeError("Pipeline produced an invalid contract") from error
     except ValueError as error:
@@ -134,7 +170,7 @@ def main() -> int:
     parser.add_argument("command", choices=["analyze"])
     parser.parse_args()
     try:
-        result = analyze(AnalyzeRequest.model_validate_json(sys.stdin.buffer.read()))
+        result = analyze(REQUEST.validate_json(sys.stdin.buffer.read()))
         print(json.dumps(result, allow_nan=False))
     except (ValidationError, InvalidAnalysisInput):
         print(json.dumps({"error": "invalid_analysis_input"}), file=sys.stderr)
