@@ -2,8 +2,15 @@ import { CONTRACT_VERSION } from "@sports-motion/contracts";
 
 export * from "./access-policy.js";
 export type { AnalysisReceipt, AnalysisSubmission, RevisionCommitReceipt } from "./analysis.js";
+export * from "./auth.js";
 export * from "./http.js";
 export * from "./lifecycle.js";
+export {
+  type MediaMethod,
+  type MediaUrlClaims,
+  signMediaUrl,
+  verifyMediaUrl,
+} from "./media-signing.js";
 export * from "./share-token.js";
 export * from "./state-store.js";
 export {

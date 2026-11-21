@@ -1,7 +1,9 @@
+import type { KeyObject } from "node:crypto";
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AccessPolicy, Resource } from "./access-policy.js";
 import { AnalysisConflict } from "./analysis.js";
+import { isMediaObjectKey, isMediaSegment, signMediaUrl } from "./media-signing.js";
 import { InvalidMotionInput, type MotionWorker, UvMotionWorker } from "./worker.js";
 
 const resources = new Map<string, Resource>([
@@ -16,6 +18,7 @@ const resources = new Map<string, Resource>([
 export interface ApiOptions {
   policy: AccessPolicy;
   authenticate: (request: IncomingMessage) => string | undefined | Promise<string | undefined>;
+  mediaSigning?: { baseUrl: string; secret: KeyObject; now?: () => number };
   worker?: MotionWorker;
 }
 
@@ -34,7 +37,7 @@ function respond(response: ServerResponse, status: number, json: string) {
 }
 
 class InvalidRequest extends Error {}
-class PayloadTooLarge extends Error {}
+class PayloadTooLarge extends InvalidRequest {}
 
 function hasBody(request: IncomingMessage) {
   return (
@@ -45,6 +48,7 @@ function hasBody(request: IncomingMessage) {
 
 async function body(
   request: IncomingMessage,
+  response: ServerResponse,
   limit = metadataBodyLimit,
 ): Promise<Record<string, unknown>> {
   if (Number(request.headers["content-length"]) > limit) {
@@ -55,15 +59,17 @@ async function body(
   ) {
     throw new InvalidRequest();
   }
+  if (request.headers.expect?.toLowerCase() === "100-continue") {
+    response.writeContinue();
+  }
   const chunks: Buffer[] = [];
   let length = 0;
-  for await (const chunk of request.iterator({ destroyOnReturn: false })) {
-    const buffer = Buffer.from(chunk);
-    length += buffer.length;
+  for await (const chunk of request.iterator({ destroyOnReturn: false }) as AsyncIterable<Buffer>) {
+    length += chunk.length;
     if (length > limit) {
       throw new PayloadTooLarge();
     }
-    chunks.push(buffer);
+    chunks.push(chunk);
   }
   let value: unknown;
   try {
@@ -193,12 +199,32 @@ export async function handleApiRequest(
       collection === "evidence-snapshots" &&
       segments.length === 5 &&
       action === "checkpoints";
-    const resource = analyze || revise ? "TrialVideo" : collection && resources.get(collection);
+    const signedUrl =
+      request.method === "POST" &&
+      collection === "trial-videos" &&
+      action === "signed-url" &&
+      segments.length === 5;
+    const deleteAthlete =
+      request.method === "DELETE" &&
+      collection === "athletes" &&
+      action === "personal-data" &&
+      segments.length === 5;
+    const resource =
+      analyze || revise
+        ? "TrialVideo"
+        : deleteAthlete
+          ? "AthleteProfile"
+          : collection && resources.get(collection);
     if (
       route !== "teams" ||
       !teamId ||
       !resource ||
-      (segments.length > 4 && !analyze && !revise && !checkpoints) ||
+      (segments.length > 4 &&
+        !analyze &&
+        !revise &&
+        !checkpoints &&
+        !signedUrl &&
+        !deleteAthlete) ||
       [...query].some(
         ([key, value]) =>
           !((key === "teamId" && value === teamId) || (key === "id" && value === id)),
@@ -217,13 +243,47 @@ export async function handleApiRequest(
         }
         return respond(response, 404, '{"error":"not_found"}');
       }
-      const input = await body(request, analysisBodyLimit);
+      const input = await body(request, response, analysisBodyLimit);
       const worker = options.worker ?? analysisWorker;
       const analysis = revise
         ? await policy.commitCoordinateRevision(userId, teamId, id, input, worker)
         : await policy.analyzeTrial(userId, teamId, id, input, worker);
       result = analysis?.receipt;
       status = analysis?.created ? 201 : 200;
+    } else if (signedUrl && id) {
+      const media = options.mediaSigning;
+      if (!media || !policy.canAccessTrialVideo(userId, teamId, id, "R")) {
+        if (hasBody(request)) {
+          response.setHeader("Connection", "close");
+        }
+        return respond(response, 404, '{"error":"not_found"}');
+      }
+      const {
+        method,
+        object_key = "video.mp4",
+        ttl_seconds = 300,
+        ...extra
+      } = await body(request, response);
+      if (
+        (method === "GET" || method === "PUT") &&
+        isMediaSegment(teamId) &&
+        isMediaSegment(id) &&
+        isMediaObjectKey(object_key) &&
+        typeof ttl_seconds === "number" &&
+        Number.isSafeInteger(ttl_seconds) &&
+        ttl_seconds > 0 &&
+        Object.keys(extra).length === 0 &&
+        policy.canAccessTrialVideo(userId, teamId, id, method === "GET" ? "R" : "W")
+      ) {
+        const expiresAt = (media.now ?? Date.now)() + Math.min(ttl_seconds, 900) * 1000;
+        const url = signMediaUrl(
+          { baseUrl: media.baseUrl, teamId, trialId: id, objectKey: object_key, method, expiresAt },
+          media.secret,
+        );
+        result = { url, expires_at: new Date(expiresAt).toISOString(), method, object_key };
+      }
+    } else if (deleteAthlete && id) {
+      result = policy.deleteAthletePersonalData(userId, teamId, id);
     } else if (checkpoints && id) {
       result = policy.readEvidenceCheckpoints(userId, teamId, id);
     } else if (request.method === "GET") {
@@ -231,9 +291,9 @@ export async function handleApiRequest(
         ? policy.read(userId, teamId, resource, id)
         : policy.list(userId, teamId, resource);
     } else if (request.method === "PUT" && id) {
-      result = policy.write(userId, teamId, resource, id, await body(request));
+      result = policy.write(userId, teamId, resource, id, await body(request, response));
     } else if (request.method === "POST" && resource === "ShareLink" && id === undefined) {
-      result = policy.issue(userId, teamId, await body(request));
+      result = policy.issue(userId, teamId, await body(request, response));
       status = 201;
     } else if (request.method === "DELETE" && resource === "ShareLink" && id) {
       result = policy.revoke(userId, teamId, id) ? { revoked: true } : undefined;
@@ -245,12 +305,13 @@ export async function handleApiRequest(
     if (response.destroyed) {
       return;
     }
-    if (error instanceof InvalidRequest) {
-      return respond(response, 404, '{"error":"not_found"}');
-    }
     if (error instanceof PayloadTooLarge) {
+      request.pause();
       response.setHeader("Connection", "close");
       return respond(response, 413, '{"error":"payload_too_large"}');
+    }
+    if (error instanceof InvalidRequest) {
+      return respond(response, 404, '{"error":"not_found"}');
     }
     if (error instanceof InvalidMotionInput) {
       return respond(response, 422, '{"error":"invalid_analysis_input"}');
@@ -263,9 +324,10 @@ export async function handleApiRequest(
 }
 
 export function createApiServer(options: ApiOptions) {
-  return createServer((request, response) => {
+  const handle = (request: IncomingMessage, response: ServerResponse) => {
     void handleApiRequest(request, response, options);
-  });
+  };
+  return createServer(handle).on("checkContinue", handle);
 }
 
 export async function startApiServer(options: ApiOptions, { host = "127.0.0.1", port = 0 } = {}) {
