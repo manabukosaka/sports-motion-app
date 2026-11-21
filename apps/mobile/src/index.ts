@@ -1,5 +1,6 @@
 import { type FrameIndex, type Image2DPoint, validateContract } from "@sports-motion/contracts";
 
+export * from "./coaching-studio.js";
 export * from "./editing-studio.js";
 export * from "./walking-skeleton.js";
 

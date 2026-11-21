@@ -42,6 +42,9 @@ importers:
 
   apps/mobile:
     dependencies:
+      '@sports-motion/coaching':
+        specifier: workspace:*
+        version: link:../../packages/coaching
       '@sports-motion/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -51,9 +54,25 @@ importers:
 
   apps/share-web:
     dependencies:
+      '@sports-motion/coaching':
+        specifier: workspace:*
+        version: link:../../packages/coaching
       '@sports-motion/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+
+  packages/coaching:
+    dependencies:
+      '@sports-motion/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@sports-motion/evidence':
+        specifier: workspace:*
+        version: link:../evidence
+    devDependencies:
+      fast-check:
+        specifier: 4.5.3
+        version: 4.5.3
 
   packages/contracts:
     dependencies:

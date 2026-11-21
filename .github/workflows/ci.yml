@@ -64,6 +64,7 @@ jobs:
       - run: pnpm run test:evidence
       - run: pnpm run test:export
       - run: pnpm run test:editing
+      - run: pnpm run test:coaching
       - run: pnpm run test
 
   verify-lifecycle:
@@ -129,6 +130,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps --only-shell chromium
       - run: pnpm run verify:access-policy
+      - run: pnpm run verify:comparison-view
 
   biomech-eval:
     runs-on: ubuntu-latest

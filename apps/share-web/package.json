@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@sports-motion/coaching": "workspace:*",
     "@sports-motion/contracts": "workspace:*"
   }
 }
