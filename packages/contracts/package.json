@@ -1,0 +1,26 @@
+{
+  "name": "@sports-motion/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/packages/contracts/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test:contracts": "vitest run tests/contracts.test.ts",
+    "test:g3": "tsc --noEmit && vitest run tests/g3-units.test.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "ajv": "8.18.0",
+    "ajv-formats": "3.0.1"
+  },
+  "devDependencies": {
+    "fast-check": "4.5.3"
+  }
+}

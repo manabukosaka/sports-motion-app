@@ -54,3 +54,11 @@
   - `uv run --project services/motion-engine --frozen pytest evals/biomechanics/tests`
   - `uv run --project services/motion-engine --frozen python evals/biomechanics/run_eval.py`
   - `uv run --project services/motion-engine --frozen python scripts/test-license-gate.py --self-test`
+  - `pnpm install --frozen-lockfile`（Node.js 22。PowerShell でスクリプト実行が制限されている場合は `pnpm.cmd` を使用）
+  - `pnpm run typecheck`
+  - `pnpm run lint`
+  - `pnpm run check:boundaries`
+  - `pnpm run check:boundaries:self-test`
+  - `pnpm run test:contracts`
+  - `pnpm run test:g3`
+  - `pnpm run test`
