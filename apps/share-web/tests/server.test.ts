@@ -12,6 +12,45 @@ function baseUrl(server: Server) {
   return `http://127.0.0.1:${address.port}`;
 }
 
+test("serves the comparison page only for an exact GET with the demo option", async () => {
+  const apiBaseUrl = "http://127.0.0.1:1";
+  const html = '<main data-non-diagnostic="true">医療診断には使用できません。</main>';
+  const regular = await startShareWebServer({ apiBaseUrl });
+  try {
+    const demo = await startShareWebServer({ apiBaseUrl, demoComparisonHtml: () => html });
+    try {
+      const page = await fetch(`${baseUrl(demo)}/demo/compare`);
+      expect(page.status).toBe(200);
+      expect(page.headers.get("content-type")).toBe("text/html; charset=utf-8");
+      expect(await page.text()).toBe(html);
+
+      const invalid = await fetch(`${baseUrl(regular)}/missing`);
+      const publicHeaders = [...invalid.headers].filter(([key]) => key !== "date");
+      expect(await invalid.text()).toBe("Not found");
+      for (const [server, path, method] of [
+        [regular, "/demo/compare", "GET"],
+        [demo, "/demo/compare?x=1", "GET"],
+        [demo, "/demo/compare/", "GET"],
+        [demo, "/demo/compare", "POST"],
+      ] as const) {
+        const denied = await fetch(`${baseUrl(server)}${path}`, { method });
+        const headers = [...denied.headers].filter(([key]) => key !== "date");
+        expect(denied.status).toBe(404);
+        expect(headers).toEqual(publicHeaders);
+        expect(await denied.text()).toBe("Not found");
+      }
+    } finally {
+      const closed = once(demo, "close");
+      demo.close();
+      await closed;
+    }
+  } finally {
+    const closed = once(regular, "close");
+    regular.close();
+    await closed;
+  }
+});
+
 test("uses only the signed share capability and rejects invalid upstream reports", async () => {
   const snapshot = JSON.parse(
     readFileSync(

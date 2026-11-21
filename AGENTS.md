@@ -76,4 +76,6 @@
   - `pnpm run verify:access-policy`
   - `pnpm run verify:comparison-view`
   - `pnpm run test:walking-skeleton-e2e`
+  - `pnpm run dev:demo`
+  - `pnpm run test:dev-demo`
   - `pnpm run test`
