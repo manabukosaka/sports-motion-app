@@ -1,5 +1,8 @@
+import { once } from "node:events";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AccessPolicy, Resource } from "./access-policy.js";
+import { AnalysisConflict } from "./analysis.js";
+import { InvalidMotionInput, type MotionWorker, UvMotionWorker } from "./worker.js";
 
 const resources = new Map<string, Resource>([
   ["teams", "Team"],
@@ -13,7 +16,12 @@ const resources = new Map<string, Resource>([
 export interface ApiOptions {
   policy: AccessPolicy;
   authenticate: (request: IncomingMessage) => string | undefined | Promise<string | undefined>;
+  worker?: MotionWorker;
 }
+
+const analysisWorker = new UvMotionWorker();
+const metadataBodyLimit = 64 * 1024;
+const analysisBodyLimit = 2 * 1024 * 1024;
 
 function respond(response: ServerResponse, status: number, json: string) {
   response.writeHead(status, {
@@ -26,6 +34,7 @@ function respond(response: ServerResponse, status: number, json: string) {
 }
 
 class InvalidRequest extends Error {}
+class PayloadTooLarge extends Error {}
 
 function hasBody(request: IncomingMessage) {
   return (
@@ -34,7 +43,13 @@ function hasBody(request: IncomingMessage) {
   );
 }
 
-async function body(request: IncomingMessage): Promise<Record<string, unknown>> {
+async function body(
+  request: IncomingMessage,
+  limit = metadataBodyLimit,
+): Promise<Record<string, unknown>> {
+  if (Number(request.headers["content-length"]) > limit) {
+    throw new PayloadTooLarge();
+  }
   if (
     request.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase() !== "application/json"
   ) {
@@ -42,15 +57,13 @@ async function body(request: IncomingMessage): Promise<Record<string, unknown>> 
   }
   const chunks: Buffer[] = [];
   let length = 0;
-  for await (const chunk of request) {
+  for await (const chunk of request.iterator({ destroyOnReturn: false })) {
     const buffer = Buffer.from(chunk);
     length += buffer.length;
-    if (length <= 65536) {
-      chunks.push(buffer);
+    if (length > limit) {
+      throw new PayloadTooLarge();
     }
-  }
-  if (length > 65536) {
-    throw new InvalidRequest();
+    chunks.push(buffer);
   }
   let value: unknown;
   try {
@@ -150,20 +163,25 @@ export async function handleApiRequest(
       return respond(response, 404, '{"error":"not_found"}');
     }
     const { segments, query } = parseTarget(request.url ?? "");
-    if (segments[0] === "shares") {
+    if (segments[0] === "shares" || segments[0] === "share") {
       const json = shareView(options.policy, request.method, segments, query);
       return json === undefined
         ? respond(response, 404, '{"error":"not_found"}')
         : respond(response, 200, json);
     }
 
-    const [route, teamId, collection, id] = segments;
+    const [route, teamId, collection, id, action] = segments;
     const resource = collection ? resources.get(collection) : undefined;
+    const analyze =
+      request.method === "POST" &&
+      resource === "TrialVideo" &&
+      segments.length === 5 &&
+      action === "analyze";
     if (
       route !== "teams" ||
       !teamId ||
       !resource ||
-      segments.length > 4 ||
+      (segments.length > 4 && !analyze) ||
       [...query].some(
         ([key, value]) =>
           !((key === "teamId" && value === teamId) || (key === "id" && value === id)),
@@ -175,7 +193,23 @@ export async function handleApiRequest(
     const userId = await options.authenticate(request);
     let result: unknown;
     let status = 200;
-    if (request.method === "GET") {
+    if (analyze && id) {
+      if (!policy.canAnalyzeTrial(userId, teamId, id)) {
+        if (hasBody(request)) {
+          response.setHeader("Connection", "close");
+        }
+        return respond(response, 404, '{"error":"not_found"}');
+      }
+      const analysis = await policy.analyzeTrial(
+        userId,
+        teamId,
+        id,
+        await body(request, analysisBodyLimit),
+        options.worker ?? analysisWorker,
+      );
+      result = analysis?.receipt;
+      status = analysis?.created ? 201 : 200;
+    } else if (request.method === "GET") {
       result = id
         ? policy.read(userId, teamId, resource, id)
         : policy.list(userId, teamId, resource);
@@ -197,6 +231,16 @@ export async function handleApiRequest(
     if (error instanceof InvalidRequest) {
       return respond(response, 404, '{"error":"not_found"}');
     }
+    if (error instanceof PayloadTooLarge) {
+      response.setHeader("Connection", "close");
+      return respond(response, 413, '{"error":"payload_too_large"}');
+    }
+    if (error instanceof InvalidMotionInput) {
+      return respond(response, 422, '{"error":"invalid_analysis_input"}');
+    }
+    if (error instanceof AnalysisConflict) {
+      return respond(response, 409, '{"error":"analysis_conflict"}');
+    }
     respond(response, 500, '{"error":"internal_error"}');
   }
 }
@@ -205,4 +249,11 @@ export function createApiServer(options: ApiOptions) {
   return createServer((request, response) => {
     void handleApiRequest(request, response, options);
   });
+}
+
+export async function startApiServer(options: ApiOptions, { host = "127.0.0.1", port = 0 } = {}) {
+  const server = createApiServer(options);
+  server.listen(port, host);
+  await once(server, "listening");
+  return server;
 }

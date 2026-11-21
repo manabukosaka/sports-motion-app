@@ -1,11 +1,20 @@
 import { type KeyObject, randomUUID } from "node:crypto";
 import {
   type KinematicMetrics,
+  type Pose3DSequence,
   type ShareReportSnapshot,
   validateContract,
 } from "@sports-motion/contracts";
+import { AnalysisConflict, type AnalysisReceipt, parseAnalysisSubmission } from "./analysis.js";
+import { jsonDigest } from "./canonical-json.js";
 import { type ShareTokenClaims, signShareToken, verifyShareToken } from "./share-token.js";
 import type { StateStore } from "./state-store.js";
+import {
+  type MotionWorker,
+  validateWorkerResult,
+  type WorkerAnalysisRequest,
+  type WorkerAnalysisResult,
+} from "./worker.js";
 
 export type Role = "OrgAdmin" | "Coach" | "Athlete" | "Guardian";
 export type Principal = Role | "AnonymousShareViewer" | "Unauthenticated";
@@ -79,6 +88,9 @@ export interface TrialVideo extends Owned {
 export interface AnalysisRecord extends Owned {
   trialId: string;
   summary: KinematicMetrics;
+  pose3d?: Pose3DSequence;
+  calibration?: WorkerAnalysisRequest["calibration"];
+  selectedCutoffsHz?: WorkerAnalysisResult["selected_cutoffs_hz"];
 }
 
 export interface EvidenceRecord extends Owned {
@@ -121,6 +133,76 @@ export interface AccessState {
   analyses: AnalysisRecord[];
   evidence: EvidenceRecord[];
   links: Link[];
+  motionJobs?: MotionJob[];
+}
+
+interface MotionJob {
+  teamId: string;
+  trialId: string;
+  captureId: string;
+  jobId: string;
+  captureDigest: string;
+  requestDigest: string;
+}
+
+function checkMotionJob(jobs: Iterable<MotionJob>, job: MotionJob) {
+  let existing: MotionJob | undefined;
+  for (const saved of jobs) {
+    if (saved.teamId !== job.teamId) {
+      continue;
+    }
+    const sameTrial = saved.trialId === job.trialId;
+    const sameJob = sameTrial && saved.jobId === job.jobId;
+    if (
+      (saved.captureId === job.captureId &&
+        (!sameTrial || saved.captureDigest !== job.captureDigest)) ||
+      (sameTrial && saved.captureId !== job.captureId) ||
+      (sameJob && saved.requestDigest !== job.requestDigest)
+    ) {
+      throw new AnalysisConflict("Capture or analysis job already has different inputs");
+    }
+    if (sameJob) {
+      existing = saved;
+    }
+  }
+  return existing;
+}
+
+function motionIds(job: MotionJob) {
+  const digest = jsonDigest([job.teamId, job.trialId, job.jobId]);
+  return { analysis_revision_id: `analysis-${digest}`, evidence_snapshot_id: `evidence-${digest}` };
+}
+
+function savedAnalysis(
+  state: AccessState,
+  job: MotionJob,
+  trial: TrialVideo,
+): AnalysisReceipt | undefined {
+  const ids = motionIds(job);
+  const analysis = inTeam(state.analyses, ids.analysis_revision_id, job.teamId);
+  const evidence = inTeam(state.evidence, ids.evidence_snapshot_id, job.teamId);
+  if (
+    !analysis?.pose3d ||
+    !analysis.selectedCutoffsHz ||
+    analysis.trialId !== trial.id ||
+    analysis.athleteId !== trial.athleteId ||
+    evidence?.nonDiagnostic !== true ||
+    evidence.analysisRevisionId !== analysis.id ||
+    evidence.trialId !== trial.id ||
+    evidence.athleteId !== trial.athleteId
+  ) {
+    return;
+  }
+  return {
+    ...ids,
+    pose3d: analysis.pose3d,
+    kinematic_metrics: analysis.summary,
+    selected_cutoffs_hz: analysis.selectedCutoffsHz,
+    evidence_registry_version: evidence.registryVersion,
+    non_diagnostic_flag: true,
+    disclaimer_text_ja: evidence.disclaimerTextJa,
+    evidence_comparisons: [],
+  };
 }
 
 const collections = {
@@ -241,6 +323,17 @@ function permittedRow(
   return member.role !== "Athlete" || resource === "Team" || scope.athleteId === member.athleteId;
 }
 
+function writableTrial(
+  state: AccessState,
+  userId: string | undefined,
+  teamId: string,
+  trialId: string,
+) {
+  const member = memberFor(state, userId, teamId, "TrialVideo", "W");
+  const trial = inTeam(state.trials, trialId, teamId);
+  return member && trial && permittedRow(state, member, "TrialVideo", trial) ? trial : undefined;
+}
+
 function presentRow(row: ResourceRecord) {
   if ("claims" in row) {
     return { id: row.id, ...row.claims, revoked: row.revoked };
@@ -258,6 +351,13 @@ function nonblank(value: unknown): value is string {
 
 export class AccessPolicy {
   private lastTime = Number.NEGATIVE_INFINITY;
+  private readonly pendingMotionJobs = new Map<
+    string,
+    {
+      job: MotionJob;
+      result: Promise<WorkerAnalysisResult>;
+    }
+  >();
 
   constructor(
     private readonly store: StateStore<AccessState>,
@@ -368,6 +468,98 @@ export class AccessPolicy {
         return trial;
       }
     });
+  }
+
+  canAnalyzeTrial(userId: string | undefined, teamId: string, trialId: string) {
+    return writableTrial(this.store.read(), userId, teamId, trialId) !== undefined;
+  }
+
+  async analyzeTrial(
+    userId: string | undefined,
+    teamId: string,
+    trialId: string,
+    submission: unknown,
+    worker: MotionWorker,
+  ) {
+    const state = this.store.read();
+    const trial = writableTrial(state, userId, teamId, trialId);
+    if (!trial) {
+      return;
+    }
+    const { capture_id, analysis_job_id, ...inputs } = parseAnalysisSubmission(submission, trialId);
+    const job: MotionJob = {
+      teamId,
+      trialId,
+      captureId: capture_id,
+      jobId: analysis_job_id,
+      captureDigest: jsonDigest([inputs.raw_revision_id, inputs.views]),
+      requestDigest: jsonDigest([trialId, capture_id, inputs]),
+    };
+    const existing = checkMotionJob(state.motionJobs ?? [], job);
+    if (existing) {
+      const receipt = savedAnalysis(state, existing, trial);
+      return receipt && { receipt, created: false };
+    }
+    checkMotionJob(
+      Array.from(this.pendingMotionJobs.values(), ({ job }) => job),
+      job,
+    );
+    const key = JSON.stringify([teamId, trialId, analysis_job_id]);
+    const pending = this.pendingMotionJobs.get(key);
+    const ids = motionIds(job);
+    const request = { ...inputs, analysis_revision_id: ids.analysis_revision_id };
+    const computation = pending?.result ?? Promise.resolve().then(() => worker.analyze(request));
+    if (!pending) {
+      this.pendingMotionJobs.set(key, { job, result: computation });
+    }
+    try {
+      const result = await computation;
+      if (!validateWorkerResult(result, request)) {
+        throw new Error("Motion worker returned an invalid analysis result");
+      }
+      return this.store.update((draft) => {
+        if (writableTrial(draft, userId, teamId, trialId)?.athleteId !== trial.athleteId) {
+          return;
+        }
+        const saved = checkMotionJob(draft.motionJobs ?? [], job);
+        if (saved) {
+          const receipt = savedAnalysis(draft, saved, trial);
+          return receipt && { receipt, created: false };
+        }
+        if (
+          inTeam(draft.analyses, ids.analysis_revision_id, teamId) ||
+          inTeam(draft.evidence, ids.evidence_snapshot_id, teamId)
+        ) {
+          throw new AnalysisConflict("Analysis or evidence ID is already taken");
+        }
+        const scope = { teamId, trialId, athleteId: trial.athleteId };
+        draft.analyses.push({
+          ...scope,
+          id: ids.analysis_revision_id,
+          summary: result.kinematic_metrics,
+          pose3d: result.pose3d,
+          calibration: inputs.calibration,
+          selectedCutoffsHz: result.selected_cutoffs_hz,
+        });
+        draft.evidence.push({
+          ...scope,
+          id: ids.evidence_snapshot_id,
+          analysisRevisionId: ids.analysis_revision_id,
+          contractVersion: result.kinematic_metrics.contract_version,
+          registryVersion: result.evidence_registry_version,
+          comparisons: result.evidence_comparisons,
+          nonDiagnostic: result.non_diagnostic_flag,
+          disclaimerTextJa: result.disclaimer_text_ja,
+        });
+        draft.motionJobs ??= [];
+        draft.motionJobs.push(job);
+        return { receipt: { ...result, ...ids }, created: true };
+      });
+    } finally {
+      if (!pending) {
+        this.pendingMotionJobs.delete(key);
+      }
+    }
   }
 
   issue(userId: string | undefined, teamId: string, fields: Fields) {

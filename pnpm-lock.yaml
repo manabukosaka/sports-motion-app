@@ -29,6 +29,10 @@ importers:
       '@sports-motion/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+    devDependencies:
+      '@sports-motion/share-web':
+        specifier: workspace:*
+        version: link:../share-web
 
   apps/mobile:
     dependencies:

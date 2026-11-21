@@ -8,11 +8,15 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --exclude '**/verify-*.test.ts'",
+    "test": "vitest run --exclude '**/verify-*.test.ts' --exclude '**/*.integration.test.ts'",
+    "test:vertical-slice": "vitest run tests/vertical-slice.integration.test.ts",
     "verify:lifecycle": "vitest run tests/verify-lifecycle.test.ts",
     "verify:access-policy": "vitest run tests/verify-access-policy.test.ts"
   },
   "dependencies": {
     "@sports-motion/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@sports-motion/share-web": "workspace:*"
   }
 }
