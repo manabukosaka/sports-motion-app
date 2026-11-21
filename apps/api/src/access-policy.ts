@@ -1,10 +1,16 @@
 import { type KeyObject, randomUUID } from "node:crypto";
 import {
+  type EvidenceCatalog,
   type KinematicMetrics,
   type Pose3DSequence,
   type ShareReportSnapshot,
   validateContract,
 } from "@sports-motion/contracts";
+import {
+  type CoachingCheckpoint,
+  compareMetricsAgainstCatalog,
+  loadEvidenceCatalog,
+} from "@sports-motion/evidence";
 import { AnalysisConflict, type AnalysisReceipt, parseAnalysisSubmission } from "./analysis.js";
 import { jsonDigest } from "./canonical-json.js";
 import { type ShareTokenClaims, signShareToken, verifyShareToken } from "./share-token.js";
@@ -99,6 +105,7 @@ export interface EvidenceRecord extends Owned {
   contractVersion: string;
   registryVersion: string;
   comparisons: ShareReportSnapshot["evidence_comparisons"];
+  checkpoints?: CoachingCheckpoint[];
   nonDiagnostic?: boolean;
   disclaimerTextJa: string;
 }
@@ -174,6 +181,15 @@ function motionIds(job: MotionJob) {
   return { analysis_revision_id: `analysis-${digest}`, evidence_snapshot_id: `evidence-${digest}` };
 }
 
+function evidenceReceiptFields(evidence: EvidenceRecord) {
+  return {
+    evidence_registry_version: evidence.registryVersion,
+    non_diagnostic_flag: true,
+    disclaimer_text_ja: evidence.disclaimerTextJa,
+    evidence_comparisons: evidence.comparisons,
+  } as const;
+}
+
 function savedAnalysis(
   state: AccessState,
   job: MotionJob,
@@ -199,10 +215,7 @@ function savedAnalysis(
     pose3d: analysis.pose3d,
     kinematic_metrics: analysis.summary,
     selected_cutoffs_hz: analysis.selectedCutoffsHz,
-    evidence_registry_version: evidence.registryVersion,
-    non_diagnostic_flag: true,
-    disclaimer_text_ja: evidence.disclaimerTextJa,
-    evidence_comparisons: [],
+    ...evidenceReceiptFields(evidence),
   };
 }
 
@@ -339,6 +352,10 @@ function presentRow(row: ResourceRecord) {
   if ("claims" in row) {
     return { id: row.id, ...row.claims, revoked: row.revoked };
   }
+  if ("checkpoints" in row) {
+    const { checkpoints: _, ...evidence } = row;
+    return evidence;
+  }
   return row;
 }
 
@@ -352,6 +369,7 @@ function nonblank(value: unknown): value is string {
 
 export class AccessPolicy {
   private lastTime = Number.NEGATIVE_INFINITY;
+  private evidenceCatalog = loadEvidenceCatalog();
   private readonly pendingMotionJobs = new Map<
     string,
     {
@@ -380,13 +398,40 @@ export class AccessPolicy {
     return this.lastTime;
   }
 
-  read(userId: string | undefined, teamId: string, resource: Resource, id: string) {
+  setEvidenceCatalog(catalog: EvidenceCatalog) {
+    this.evidenceCatalog = loadEvidenceCatalog(catalog);
+  }
+
+  private readableRow<ResourceKind extends Resource>(
+    userId: string | undefined,
+    teamId: string,
+    resource: ResourceKind,
+    id: string,
+  ) {
     const state = this.store.read();
     const member = memberFor(state, userId, teamId, resource, "R");
-    const row = inTeam<ResourceRecord>(state[collections[resource]], id, teamId);
-    return member && row && permittedRow(state, member, resource, row)
-      ? presentRow(row)
-      : undefined;
+    const row = inTeam<AccessState[(typeof collections)[ResourceKind]][number]>(
+      state[collections[resource]],
+      id,
+      teamId,
+    );
+    return member && row && permittedRow(state, member, resource, row) ? row : undefined;
+  }
+
+  read(userId: string | undefined, teamId: string, resource: Resource, id: string) {
+    const row = this.readableRow(userId, teamId, resource, id);
+    return row && presentRow(row);
+  }
+
+  readEvidenceCheckpoints(userId: string | undefined, teamId: string, id: string) {
+    const evidence = this.readableRow(userId, teamId, "EvidenceSnapshot", id);
+    return (
+      evidence && {
+        evidence_snapshot_id: evidence.id,
+        evidence_registry_version: evidence.registryVersion,
+        checkpoints: evidence.checkpoints ?? [],
+      }
+    );
   }
 
   list(userId: string | undefined, teamId: string, resource: Resource) {
@@ -534,6 +579,11 @@ export class AccessPolicy {
           throw new AnalysisConflict("Analysis or evidence ID is already taken");
         }
         const scope = { teamId, trialId, athleteId: trial.athleteId };
+        const catalog = this.evidenceCatalog;
+        const { evidence_comparisons, checkpoints } = compareMetricsAgainstCatalog(
+          result.kinematic_metrics,
+          catalog,
+        );
         draft.analyses.push({
           ...scope,
           id: ids.analysis_revision_id,
@@ -542,19 +592,24 @@ export class AccessPolicy {
           calibration: inputs.calibration,
           selectedCutoffsHz: result.selected_cutoffs_hz,
         });
-        draft.evidence.push({
+        const evidence: EvidenceRecord = {
           ...scope,
           id: ids.evidence_snapshot_id,
           analysisRevisionId: ids.analysis_revision_id,
           contractVersion: result.kinematic_metrics.contract_version,
-          registryVersion: result.evidence_registry_version,
-          comparisons: result.evidence_comparisons,
-          nonDiagnostic: result.non_diagnostic_flag,
-          disclaimerTextJa: result.disclaimer_text_ja,
-        });
+          registryVersion: catalog.evidence_registry_version,
+          comparisons: evidence_comparisons,
+          checkpoints,
+          nonDiagnostic: catalog.disclaimer_policy.non_diagnostic_flag,
+          disclaimerTextJa: catalog.disclaimer_policy.user_facing_text_ja,
+        };
+        draft.evidence.push(evidence);
         draft.motionJobs ??= [];
         draft.motionJobs.push(job);
-        return { receipt: { ...result, ...ids }, created: true };
+        return {
+          receipt: { ...result, ...ids, ...evidenceReceiptFields(evidence) },
+          created: true,
+        };
       });
     } finally {
       if (!pending) {

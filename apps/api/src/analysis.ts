@@ -1,4 +1,4 @@
-import { validateContract } from "@sports-motion/contracts";
+import { type ShareReportSnapshot, validateContract } from "@sports-motion/contracts";
 import {
   InvalidMotionInput,
   type WorkerAnalysisRequest,
@@ -10,9 +10,10 @@ export interface AnalysisSubmission extends Omit<WorkerAnalysisRequest, "analysi
   analysis_job_id: string;
 }
 
-export interface AnalysisReceipt extends WorkerAnalysisResult {
+export interface AnalysisReceipt extends Omit<WorkerAnalysisResult, "evidence_comparisons"> {
   analysis_revision_id: string;
   evidence_snapshot_id: string;
+  evidence_comparisons: ShareReportSnapshot["evidence_comparisons"];
 }
 
 export class AnalysisConflict extends Error {}

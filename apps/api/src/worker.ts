@@ -1,21 +1,18 @@
 import { execFile } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import {
   type CalibrationParams,
   type CoordinateRevision,
-  type EvidenceCatalog,
   type KinematicMetrics,
   type Pose2DSequence,
   type Pose3DSequence,
   validateContract,
 } from "@sports-motion/contracts";
+import { loadEvidenceCatalog } from "@sports-motion/evidence";
 
 const repository = new URL("../../../", import.meta.url);
-const catalog: EvidenceCatalog = JSON.parse(
-  readFileSync(new URL("docs/evidence/initial-literature-catalog.json", repository), "utf8"),
-);
+const catalog = loadEvidenceCatalog();
 const workerEnvironmentKeys = new Set([
   "PATH",
   "SYSTEMROOT",
