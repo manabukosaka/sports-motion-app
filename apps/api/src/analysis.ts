@@ -1,4 +1,9 @@
-import { type ShareReportSnapshot, validateContract } from "@sports-motion/contracts";
+import {
+  type CoordinateRevision,
+  type ShareReportSnapshot,
+  validateContract,
+} from "@sports-motion/contracts";
+import { applyCoordinateRevisions } from "@sports-motion/editing";
 import {
   InvalidMotionInput,
   type WorkerAnalysisRequest,
@@ -17,6 +22,55 @@ export interface AnalysisReceipt extends Omit<WorkerAnalysisResult, "evidence_co
 }
 
 export class AnalysisConflict extends Error {}
+
+export interface RevisionCommitReceipt {
+  analysis_revision_id: string;
+  evidence_snapshot_id: string;
+  coordinate_revision_id: string;
+  current_head: string;
+  recompute_ms: number;
+  pose3d: WorkerAnalysisResult["pose3d"];
+  kinematic_metrics: WorkerAnalysisResult["kinematic_metrics"];
+}
+
+export function parseRevisionCommit(body: unknown) {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    throw new InvalidMotionInput("Invalid revision commit");
+  }
+  const { revision, expected_head, analysis_job_id, ...extra } = body as Record<string, unknown>;
+  if (
+    Object.keys(extra).length > 0 ||
+    !validateContract("coordinate_revision", revision) ||
+    expected_head !== revision.expected_head ||
+    !nonblank(analysis_job_id)
+  ) {
+    throw new InvalidMotionInput("Invalid revision commit");
+  }
+  return { revision, analysisJobId: analysis_job_id };
+}
+
+export type AnalysisInputs = Omit<WorkerAnalysisRequest, "analysis_revision_id">;
+
+export function validateEditHistory(inputs: AnalysisInputs, revisions: CoordinateRevision[]) {
+  const viewIds = new Set(inputs.views.map(({ view_id }) => view_id));
+  for (const revision of revisions) {
+    for (const edit of revision.edits) {
+      if (!viewIds.has(edit.view_id)) {
+        throw new InvalidMotionInput("Coordinate edit references an unknown view");
+      }
+    }
+  }
+  try {
+    for (const view of inputs.views) {
+      applyCoordinateRevisions(view, revisions, inputs.raw_revision_id);
+    }
+  } catch (error) {
+    if (error instanceof RangeError || error instanceof TypeError) {
+      throw new InvalidMotionInput(error.message);
+    }
+    throw error;
+  }
+}
 
 function nonblank(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;

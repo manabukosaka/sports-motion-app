@@ -183,17 +183,22 @@ export async function handleApiRequest(
       (collection === "trial-videos" || collection === "trials") &&
       segments.length === 5 &&
       action === "analyze";
+    const revise =
+      request.method === "POST" &&
+      collection === "trials" &&
+      segments.length === 5 &&
+      action === "revisions";
     const checkpoints =
       request.method === "GET" &&
       collection === "evidence-snapshots" &&
       segments.length === 5 &&
       action === "checkpoints";
-    const resource = analyze ? "TrialVideo" : collection && resources.get(collection);
+    const resource = analyze || revise ? "TrialVideo" : collection && resources.get(collection);
     if (
       route !== "teams" ||
       !teamId ||
       !resource ||
-      (segments.length > 4 && !analyze && !checkpoints) ||
+      (segments.length > 4 && !analyze && !revise && !checkpoints) ||
       [...query].some(
         ([key, value]) =>
           !((key === "teamId" && value === teamId) || (key === "id" && value === id)),
@@ -205,20 +210,18 @@ export async function handleApiRequest(
     const userId = await options.authenticate(request);
     let result: unknown;
     let status = 200;
-    if (analyze && id) {
+    if ((analyze || revise) && id) {
       if (!policy.canAnalyzeTrial(userId, teamId, id)) {
         if (hasBody(request)) {
           response.setHeader("Connection", "close");
         }
         return respond(response, 404, '{"error":"not_found"}');
       }
-      const analysis = await policy.analyzeTrial(
-        userId,
-        teamId,
-        id,
-        await body(request, analysisBodyLimit),
-        options.worker ?? analysisWorker,
-      );
+      const input = await body(request, analysisBodyLimit);
+      const worker = options.worker ?? analysisWorker;
+      const analysis = revise
+        ? await policy.commitCoordinateRevision(userId, teamId, id, input, worker)
+        : await policy.analyzeTrial(userId, teamId, id, input, worker);
       result = analysis?.receipt;
       status = analysis?.created ? 201 : 200;
     } else if (checkpoints && id) {

@@ -29,6 +29,9 @@ importers:
       '@sports-motion/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@sports-motion/editing':
+        specifier: workspace:*
+        version: link:../../packages/editing
       '@sports-motion/evidence':
         specifier: workspace:*
         version: link:../../packages/evidence
@@ -42,6 +45,9 @@ importers:
       '@sports-motion/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@sports-motion/editing':
+        specifier: workspace:*
+        version: link:../../packages/editing
 
   apps/share-web:
     dependencies:
@@ -57,6 +63,16 @@ importers:
       ajv-formats:
         specifier: 3.0.1
         version: 3.0.1(ajv@8.18.0)
+    devDependencies:
+      fast-check:
+        specifier: 4.5.3
+        version: 4.5.3
+
+  packages/editing:
+    dependencies:
+      '@sports-motion/contracts':
+        specifier: workspace:*
+        version: link:../contracts
     devDependencies:
       fast-check:
         specifier: 4.5.3
