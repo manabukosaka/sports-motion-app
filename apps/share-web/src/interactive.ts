@@ -231,6 +231,7 @@ const jsonEscapes: Record<string, string> = {
 export function renderInteractiveSharePageHtml(
   snapshot: ShareReportSnapshot,
   pose3d?: Pose3DSequence,
+  cardToken?: string,
 ) {
   const html = renderShareReportHtml(snapshot);
   if (
@@ -272,5 +273,11 @@ ${chart ? `<p>${chart.label}（${chart.unit}、${chart.min.toFixed(1)}–${chart
 </section>
 <script id="viewer-data" type="application/json">${data}</script>
 <script>(${runViewer.toString()})();</script>`;
-  return html.replace("</head>", () => `${styles}</head>`).replace("<dl>", () => `${viewer}<dl>`);
+  const cardLink =
+    cardToken === undefined
+      ? ""
+      : `<p><a href="/share/${encodeURIComponent(snapshot.share_link_id)}/card.svg?token=${encodeURIComponent(cardToken)}" rel="noreferrer">サマリー画像を表示</a></p>`;
+  return html
+    .replace("</head>", () => `${styles}</head>`)
+    .replace("<dl>", () => `${cardLink}${viewer}<dl>`);
 }

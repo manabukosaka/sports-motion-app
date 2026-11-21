@@ -1,7 +1,8 @@
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { validateContract } from "@sports-motion/contracts";
+import { type Pose3DSequence, validateContract } from "@sports-motion/contracts";
 import { renderInteractiveSharePageHtml } from "./interactive.js";
+import { renderShareSummaryCardSvg } from "./summary-card.js";
 
 interface ShareWebOptions {
   apiBaseUrl: string;
@@ -9,12 +10,12 @@ interface ShareWebOptions {
   port?: number;
 }
 
-async function sharePage(request: IncomingMessage, apiBaseUrl: string) {
+async function shareResource(request: IncomingMessage, apiBaseUrl: string) {
   const separator = request.url?.indexOf("?") ?? -1;
   if (request.method !== "GET" || !request.url || separator < 0) {
     return;
   }
-  const match = /^\/share\/([^/]+)$/u.exec(request.url.slice(0, separator));
+  const match = /^\/share\/([^/]+)(\/card\.svg)?$/u.exec(request.url.slice(0, separator));
   if (!match?.[1]) {
     return;
   }
@@ -48,16 +49,33 @@ async function sharePage(request: IncomingMessage, apiBaseUrl: string) {
   ) {
     return;
   }
+  if (match[2]) {
+    return {
+      contentType: "image/svg+xml; charset=utf-8",
+      body: renderShareSummaryCardSvg(snapshot),
+    };
+  }
   const poseResponse = await fetch(`${target}/pose3d${signedQuery}`, options);
-  if (poseResponse.status !== 200) {
+  let pose: Pose3DSequence | undefined;
+  if (poseResponse.status === 200) {
+    const rawPose: unknown = await poseResponse.json();
+    if (
+      !validateContract("pose3d", rawPose) ||
+      rawPose.contract_version !== snapshot.contract_version
+    ) {
+      return;
+    }
+    pose = rawPose;
+  } else {
     await poseResponse.body?.cancel();
-    return poseResponse.status === 404 ? renderInteractiveSharePageHtml(snapshot) : undefined;
+    if (poseResponse.status !== 404) {
+      return;
+    }
   }
-  const pose: unknown = await poseResponse.json();
-  if (!validateContract("pose3d", pose) || pose.contract_version !== snapshot.contract_version) {
-    return;
-  }
-  return renderInteractiveSharePageHtml(snapshot, pose);
+  return {
+    contentType: "text/html; charset=utf-8",
+    body: renderInteractiveSharePageHtml(snapshot, pose, token),
+  };
 }
 
 async function handleRequest(
@@ -65,19 +83,19 @@ async function handleRequest(
   response: ServerResponse,
   apiBaseUrl: string,
 ) {
-  let html: string | undefined;
+  let resource: Awaited<ReturnType<typeof shareResource>>;
   try {
-    html = await sharePage(request, apiBaseUrl);
+    resource = await shareResource(request, apiBaseUrl);
   } catch {
     // Route and upstream failures have the same public response.
   }
-  response.writeHead(html === undefined ? 404 : 200, {
-    "Content-Type": html === undefined ? "text/plain; charset=utf-8" : "text/html; charset=utf-8",
+  response.writeHead(resource ? 200 : 404, {
+    "Content-Type": resource?.contentType ?? "text/plain; charset=utf-8",
     "Cache-Control": "private, no-store",
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
   });
-  response.end(html ?? "Not found");
+  response.end(resource?.body ?? "Not found");
 }
 
 export async function startShareWebServer({

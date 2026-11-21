@@ -67,6 +67,7 @@
   - `pnpm run test:contracts`
   - `pnpm run test:g3`
   - `pnpm run test:evidence`
+  - `pnpm run test:export`
   - `pnpm run test:vertical-slice`
   - `pnpm run verify:lifecycle`
   - `pnpm exec playwright install --only-shell chromium`（共有ビュー・Walking Skeleton E2E 検証の初回のみ）
