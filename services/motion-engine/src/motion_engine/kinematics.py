@@ -1,6 +1,7 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from math import atan2, degrees
+from itertools import pairwise
+from math import atan2, isfinite
 from typing import NamedTuple
 
 import numpy as np
@@ -10,24 +11,32 @@ from .calibration import FloatArray
 from .contracts import (
     CaptureEvent,
     CaptureEventID,
+    EventID,
+    Frame,
     IntervalID,
     KinematicMetrics,
+    Landmark3D,
     MetricID,
     MissingReason,
     Movement,
     NormalizedPoint,
     NormalizedWaveform,
+    Plane,
     Pose3DSequence,
     ScalarMetric,
+    Side,
+    Unit,
 )
 from .units import (
     CalibratedWorld3D,
+    HipRelative3D,
     Radians,
     RadiansPerSecond,
     TimestampSeconds,
 )
 
 ROTATION_TOLERANCE = 1e-9
+AngularPoint = CalibratedWorld3D | HipRelative3D
 
 
 def verify_rotation(matrix: FloatArray) -> FloatArray:
@@ -59,30 +68,32 @@ def _direction(vector: FloatArray) -> FloatArray:
 
 @dataclass(frozen=True)
 class AnatomicalFrame:
-    origin_m: CalibratedWorld3D
+    origin_m: AngularPoint
     rotation: FloatArray
 
     def __post_init__(self) -> None:
-        if not isinstance(self.origin_m, CalibratedWorld3D):
-            raise TypeError("anatomical frame requires calibrated world coordinates")
+        if not isinstance(self.origin_m, (CalibratedWorld3D, HipRelative3D)):
+            raise TypeError(
+                "anatomical frame requires world or hip-relative coordinates"
+            )
         rotation = verify_rotation(self.rotation).copy()
         rotation.setflags(write=False)
         object.__setattr__(self, "rotation", rotation)
 
 
-def _difference(a: CalibratedWorld3D, b: CalibratedWorld3D) -> FloatArray:
-    if not isinstance(a, CalibratedWorld3D) or not isinstance(b, CalibratedWorld3D):
-        raise TypeError("anatomical landmarks require calibrated world coordinates")
+def _difference(a: AngularPoint, b: AngularPoint) -> FloatArray:
+    if not isinstance(a, (CalibratedWorld3D, HipRelative3D)) or type(a) is not type(b):
+        raise TypeError("anatomical landmarks require matching 3D coordinate frames")
     return np.asarray(a.axes()) - b.axes()
 
 
-def _midpoint(a: CalibratedWorld3D, b: CalibratedWorld3D) -> CalibratedWorld3D:
+def _midpoint(a: AngularPoint, b: AngularPoint) -> AngularPoint:
     x, y, z = np.asarray(b.axes()) + _difference(a, b) / 2
-    return CalibratedWorld3D(x=float(x), y=float(y), z=float(z))
+    return type(a)(x=float(x), y=float(y), z=float(z))
 
 
 def _long_axis_frame(
-    origin: CalibratedWorld3D, superior: FloatArray, right: FloatArray
+    origin: AngularPoint, superior: FloatArray, right: FloatArray
 ) -> AnatomicalFrame:
     y = _direction(superior)
     x = _direction(np.cross(y, right))
@@ -90,10 +101,10 @@ def _long_axis_frame(
 
 
 def pelvis_frame(
-    left_asis: CalibratedWorld3D,
-    right_asis: CalibratedWorld3D,
-    left_psis: CalibratedWorld3D,
-    right_psis: CalibratedWorld3D,
+    left_asis: AngularPoint,
+    right_asis: AngularPoint,
+    left_psis: AngularPoint,
+    right_psis: AngularPoint,
 ) -> AnatomicalFrame:
     """Wu et al. (2002), DOI 10.1016/S0021-9290(01)00222-6. X anterior, Y superior, Z right."""
     origin = _midpoint(left_asis, right_asis)
@@ -104,10 +115,10 @@ def pelvis_frame(
 
 
 def thorax_frame(
-    jugular_notch: CalibratedWorld3D,
-    c7: CalibratedWorld3D,
-    xiphoid: CalibratedWorld3D,
-    t8: CalibratedWorld3D,
+    jugular_notch: AngularPoint,
+    c7: AngularPoint,
+    xiphoid: AngularPoint,
+    t8: AngularPoint,
 ) -> AnatomicalFrame:
     """Wu et al. (2005), DOI 10.1016/j.jbiomech.2004.05.042, §2.3.1."""
     superior = _difference(_midpoint(jugular_notch, c7), _midpoint(xiphoid, t8))
@@ -116,9 +127,9 @@ def thorax_frame(
 
 
 def humerus_frame(
-    glenohumeral_center: CalibratedWorld3D,
-    left_epicondyle: CalibratedWorld3D,
-    right_epicondyle: CalibratedWorld3D,
+    glenohumeral_center: AngularPoint,
+    left_epicondyle: AngularPoint,
+    right_epicondyle: AngularPoint,
 ) -> AnatomicalFrame:
     """Wu et al. (2005), epicondyle-based humeral frame, §2.3.4."""
     elbow = _midpoint(left_epicondyle, right_epicondyle)
@@ -130,9 +141,9 @@ def humerus_frame(
 
 
 def femur_frame(
-    hip_center: CalibratedWorld3D,
-    left_epicondyle: CalibratedWorld3D,
-    right_epicondyle: CalibratedWorld3D,
+    hip_center: AngularPoint,
+    left_epicondyle: AngularPoint,
+    right_epicondyle: AngularPoint,
 ) -> AnatomicalFrame:
     """Wu et al. (2002), proximal long axis and rightward epicondylar axis."""
     knee = _midpoint(left_epicondyle, right_epicondyle)
@@ -144,9 +155,9 @@ def femur_frame(
 
 
 def tibia_frame(
-    knee_center: CalibratedWorld3D,
-    left_malleolus: CalibratedWorld3D,
-    right_malleolus: CalibratedWorld3D,
+    knee_center: AngularPoint,
+    left_malleolus: AngularPoint,
+    right_malleolus: AngularPoint,
 ) -> AnatomicalFrame:
     ankle = _midpoint(left_malleolus, right_malleolus)
     return _long_axis_frame(
@@ -180,6 +191,8 @@ class KneeAngles(NamedTuple):
 
 def knee_joint_angles(femur: AnatomicalFrame, tibia: AnatomicalFrame) -> KneeAngles:
     """Grood–Suntay JCS, DOI 10.1115/1.3138397, using right-knee signs."""
+    if type(femur.origin_m) is not type(tibia.origin_m):
+        raise TypeError("joint axes require matching 3D coordinate frames")
     femoral_z, floating, tibial_y = _joint_axes(femur, tibia.rotation[:, 1])
     tibial_x, tibial_z = tibia.rotation[:, 0], tibia.rotation[:, 2]
     return KneeAngles(
@@ -191,10 +204,12 @@ def knee_joint_angles(femur: AnatomicalFrame, tibia: AnatomicalFrame) -> KneeAng
 
 def elbow_flexion(
     humerus: AnatomicalFrame,
-    elbow: CalibratedWorld3D,
-    distal_forearm: CalibratedWorld3D,
+    elbow: AngularPoint,
+    distal_forearm: AngularPoint,
 ) -> Radians:
     """Wu et al. (2005), proximal Z and floating axis of the Z–X–Y elbow JCS."""
+    if type(humerus.origin_m) is not type(elbow):
+        raise TypeError("joint axes require matching 3D coordinate frames")
     _, floating, _ = _joint_axes(humerus, _difference(elbow, distal_forearm))
     return Radians(value=_z_rotation(humerus, floating))
 
@@ -300,7 +315,7 @@ METRICS: dict[Movement, MetricSpec] = {
         "pitch_elbow_flexion_angle",
         "pitch_cycle",
         "pitch_leg_lift",
-        "pitch_ball_release",
+        "pitch_mir",
     ),
     "running": MetricSpec(
         "run_knee_flexion_extension_angle",
@@ -321,36 +336,485 @@ METRICS: dict[Movement, MetricSpec] = {
         "dvj_takeoff",
     ),
 }
-ARM = (
-    "right_shoulder",
-    "right_elbow_left_epicondyle",
-    "right_elbow_right_epicondyle",
-    "right_wrist",
+BONE_LINKS = (
+    ("hip", "knee"),
+    ("knee", "ankle"),
+    ("shoulder", "elbow"),
+    ("elbow", "wrist"),
 )
-LEG = (
-    "right_hip",
-    "right_knee_left_epicondyle",
-    "right_knee_right_epicondyle",
-    "right_ankle_left_malleolus",
-    "right_ankle_right_malleolus",
-)
-BONE_CENTERS = (
-    ("right_knee", LEG[1], LEG[2]),
-    ("right_ankle", LEG[3], LEG[4]),
-    ("right_elbow", ARM[1], ARM[2]),
+LANDING_EVENTS: dict[Movement, tuple[CaptureEventID, ...]] = {
+    "cmj": ("cmj_initial_landing_contact", "cmj_peak_landing_flexion"),
+    "dvj": ("dvj_initial_landing_contact", "dvj_peak_landing_flexion"),
+}
+PITCH_SPEEDS: tuple[tuple[MetricID, MetricID, MetricID | None, Plane, int], ...] = (
+    (
+        "pitch_pelvis_rotation_angle",
+        "pitch_pelvis_peak_rotation_angular_velocity",
+        "pitch_pelvis_peak_rotation_timing",
+        "transverse",
+        0,
+    ),
+    (
+        "pitch_thorax_rotation_angle",
+        "pitch_thorax_peak_rotation_angular_velocity",
+        "pitch_thorax_peak_rotation_timing",
+        "transverse",
+        0,
+    ),
+    (
+        "pitch_shoulder_axial_rotation_angle",
+        "pitch_shoulder_peak_internal_rotation_angular_velocity",
+        None,
+        "local_axis",
+        1,
+    ),
+    (
+        "pitch_elbow_flexion_angle",
+        "pitch_elbow_peak_extension_angular_velocity",
+        None,
+        "sagittal",
+        -1,
+    ),
 )
 
 
-def _flexion(points: dict[str, CalibratedWorld3D], movement: Movement) -> Radians:
-    if movement == "baseball_pitching":
-        shoulder, left, right, wrist = (points[name] for name in ARM)
-        return elbow_flexion(
-            humerus_frame(shoulder, left, right), _midpoint(left, right), wrist
+@dataclass(frozen=True)
+class AngleSample:
+    radians: float | None
+    reason: MissingReason | None = None
+
+
+@dataclass(frozen=True)
+class AngleTrack:
+    metric_id: MetricID
+    plane: Plane
+    samples: list[AngleSample]
+    stance_only: bool = False
+
+
+def _joint_center_flexion(
+    proximal: AngularPoint, joint: AngularPoint, distal: AngularPoint
+) -> float:
+    upper = _direction(_difference(joint, proximal))
+    lower = _direction(_difference(distal, joint))
+    return atan2(float(np.linalg.norm(np.cross(upper, lower))), float(upper @ lower))
+
+
+def _frame_points(frame: Frame[Landmark3D], metric: bool) -> dict[str, AngularPoint]:
+    point_type = CalibratedWorld3D if metric else HipRelative3D
+    points: dict[str, AngularPoint] = {
+        landmark.landmark_id: point_type(x=landmark.x, y=landmark.y, z=landmark.z)
+        for landmark in frame.landmarks
+        if landmark.x is not None and landmark.y is not None and landmark.z is not None
+    }
+    for side in ("left", "right"):
+        for center, pair in (
+            ("knee", ("knee_left_epicondyle", "knee_right_epicondyle")),
+            ("ankle", ("ankle_left_malleolus", "ankle_right_malleolus")),
+            ("elbow", ("elbow_left_epicondyle", "elbow_right_epicondyle")),
+        ):
+            key = f"{side}_{center}"
+            first, second = (points.get(f"{side}_{name}") for name in pair)
+            if key not in points and first is not None and second is not None:
+                points[key] = _midpoint(first, second)
+    return points
+
+
+def _angles_for_frame(
+    get: Callable[[str], AngularPoint],
+    missing: dict[str, MissingReason | None],
+    movement: Movement,
+    side: Side,
+    world_basis: FloatArray | None,
+    projected: bool,
+    metric: bool,
+) -> list[tuple[MetricID, Plane, AngleSample, bool]]:
+    sign = 1 if side == "right" else -1
+
+    def point(name: str) -> AngularPoint:
+        return get(f"{side}_{name}")
+
+    def sample(
+        metric_id: MetricID,
+        plane: Plane,
+        measure: Callable[[], float],
+        stance_only: bool = False,
+    ) -> tuple[MetricID, Plane, AngleSample, bool]:
+        try:
+            value = AngleSample(measure())
+        except KeyError as error:
+            value = AngleSample(None, missing.get(str(error.args[0])) or "occluded")
+        except ValueError:
+            value = AngleSample(None, "unidentifiable_axis")
+        return metric_id, plane, value, stance_only
+
+    def pelvis() -> AnatomicalFrame:
+        return pelvis_frame(
+            *(
+                get(name)
+                for name in ("left_asis", "right_asis", "left_psis", "right_psis")
+            )
         )
-    hip, left_knee, right_knee, left_ankle, right_ankle = (points[name] for name in LEG)
-    femur = femur_frame(hip, left_knee, right_knee)
-    tibia = tibia_frame(_midpoint(left_knee, right_knee), left_ankle, right_ankle)
-    return knee_joint_angles(femur, tibia).flexion
+
+    def thorax() -> AnatomicalFrame:
+        return thorax_frame(
+            *(get(name) for name in ("jugular_notch", "c7", "xiphoid", "t8"))
+        )
+
+    def humerus() -> AnatomicalFrame:
+        return humerus_frame(
+            point("shoulder"),
+            point("elbow_left_epicondyle"),
+            point("elbow_right_epicondyle"),
+        )
+
+    def elbow() -> float:
+        if not projected:
+            try:
+                return elbow_flexion(
+                    humerus(),
+                    _midpoint(
+                        point("elbow_left_epicondyle"), point("elbow_right_epicondyle")
+                    ),
+                    point("wrist"),
+                ).value
+            except KeyError:
+                if metric:
+                    raise
+        return _joint_center_flexion(point("shoulder"), point("elbow"), point("wrist"))
+
+    def shoulder_rotation() -> float:
+        if projected:
+            raise ValueError("axial rotation requires depth")
+        relative = thorax().rotation.T @ humerus().rotation
+        # Wu et al. (2005), §2.4.7. Choose negative X elevation in Y-X-Y.
+        if np.hypot(relative[1, 0], relative[1, 2]) < 1e-9:
+            raise ValueError("shoulder twist is singular at this elevation")
+        axial = atan2(float(-sign * relative[1, 0]), float(sign * relative[1, 2]))
+        return sign * axial
+
+    def heading(frame: Callable[[], AnatomicalFrame]) -> float:
+        if world_basis is None:
+            raise ValueError("heading requires forward and vertical axes")
+        anterior = frame().rotation[:, 0] @ world_basis
+        if np.hypot(anterior[0], anterior[2]) < 1e-9:
+            raise ValueError("heading is undefined for a vertical segment")
+        return atan2(float(-anterior[2]), float(anterior[0]))
+
+    if movement == "baseball_pitching":
+        return [
+            sample(
+                "pitch_pelvis_rotation_angle", "transverse", lambda: heading(pelvis)
+            ),
+            sample(
+                "pitch_thorax_rotation_angle", "transverse", lambda: heading(thorax)
+            ),
+            sample(
+                "pitch_shoulder_axial_rotation_angle", "local_axis", shoulder_rotation
+            ),
+            sample("pitch_elbow_flexion_angle", "sagittal", elbow),
+        ]
+
+    def knee() -> KneeAngles:
+        if projected:
+            raise ValueError("knee joint axes require depth")
+        left, right = point("knee_left_epicondyle"), point("knee_right_epicondyle")
+        femur = femur_frame(point("hip"), left, right)
+        tibia = tibia_frame(
+            _midpoint(left, right),
+            point("ankle_left_malleolus"),
+            point("ankle_right_malleolus"),
+        )
+        return knee_joint_angles(femur, tibia)
+
+    def knee_flexion() -> float:
+        if not projected:
+            try:
+                return knee().flexion.value
+            except KeyError:
+                if metric:
+                    raise
+        return _joint_center_flexion(point("hip"), point("knee"), point("ankle"))
+
+    def thigh_axis() -> FloatArray:
+        return _direction(_difference(point("hip"), point("knee")))
+
+    def hip_flexion() -> float:
+        if projected:
+            raise ValueError("hip joint axes require depth")
+        proximal = pelvis()
+        _, floating, _ = _joint_axes(proximal, thigh_axis())
+        return _z_rotation(proximal, floating)
+
+    def hip_adduction() -> float:
+        if projected:
+            raise ValueError("hip joint axes require depth")
+        return sign * float(
+            np.arcsin(np.clip(pelvis().rotation[:, 2] @ thigh_axis(), -1, 1))
+        )
+
+    def ankle_dorsiflexion() -> float:
+        if projected:
+            raise ValueError("ankle joint axes require depth")
+        # Wu et al. (2002), §3.3–3.5. The plantar normal approximates calcaneal Y.
+        left, right = point("ankle_left_malleolus"), point("ankle_right_malleolus")
+        ankle = _midpoint(left, right)
+        lateral = _direction(_difference(right, left))
+        anterior = _direction(np.cross(_difference(point("knee"), ankle), lateral))
+        shank = AnatomicalFrame(
+            ankle, np.column_stack((anterior, np.cross(lateral, anterior), lateral))
+        )
+        heel = point("heel")
+        foot_y = sign * np.cross(
+            _difference(point("fifth_metatarsal"), heel),
+            _difference(point("foot_index"), heel),
+        )
+        _, floating, _ = _joint_axes(shank, foot_y)
+        return _z_rotation(shank, floating)
+
+    def pelvic_obliquity() -> float:
+        if world_basis is None:
+            raise ValueError("pelvic obliquity requires vertical and lateral axes")
+        lateral = pelvis().rotation[:, 2] @ world_basis
+        if np.hypot(lateral[1], lateral[2]) < 1e-9:
+            raise ValueError("pelvic axis has no frontal component")
+        return sign * atan2(float(lateral[1]), float(lateral[2]))
+
+    if movement == "running":
+        return [
+            sample("run_hip_flexion_extension_angle", "sagittal", hip_flexion),
+            sample(
+                "run_ankle_dorsiflexion_plantarflexion_angle",
+                "sagittal",
+                ankle_dorsiflexion,
+            ),
+            sample("run_pelvic_obliquity_angle", "frontal", pelvic_obliquity, True),
+            sample("run_hip_adduction_angle", "frontal", hip_adduction, True),
+            sample("run_knee_flexion_extension_angle", "sagittal", knee_flexion),
+        ]
+    return [
+        sample("jump_landing_hip_flexion_angle", "sagittal", hip_flexion),
+        sample("jump_landing_ankle_dorsiflexion_angle", "sagittal", ankle_dorsiflexion),
+        sample(
+            "jump_landing_knee_abduction_angle",
+            "frontal",
+            lambda: sign * knee().abduction.value,
+        ),
+        sample("jump_landing_knee_flexion_angle", "sagittal", knee_flexion),
+    ]
+
+
+def _scalar(
+    metric: MetricID,
+    event: EventID,
+    unit: Unit,
+    plane: Plane,
+    value: float | None,
+    reason: MissingReason | None,
+    side: Side | None = None,
+) -> ScalarMetric:
+    if value is not None and not isfinite(value):
+        value, reason = None, "low_confidence"
+    return ScalarMetric(
+        metric_id=metric,
+        event_id=event,
+        unit=unit,
+        anatomical_plane=plane,
+        value_or_null=value,
+        missing_reason_or_null=reason,
+        **({"side": side} if side is not None else {}),
+    )
+
+
+def _interval(
+    positions: dict[CaptureEventID, int], first: CaptureEventID, last: CaptureEventID
+) -> slice | None:
+    start, end = positions.get(first), positions.get(last)
+    if start is None or end is None:
+        return None
+    if start >= end:
+        raise ValueError("event interval requires ordered start and end captures")
+    return slice(start, end + 1)
+
+
+def _track_values(
+    track: AngleTrack, section: slice
+) -> tuple[FloatArray, MissingReason | None]:
+    samples = track.samples[section]
+    return (
+        np.unwrap(np.array([s.radians for s in samples], dtype=np.float64))
+        if all(s.radians is not None for s in samples)
+        else np.empty(0),
+        next((s.reason for s in samples if s.reason is not None), None),
+    )
+
+
+def _pitch_peaks(
+    tracks: list[AngleTrack],
+    captured: list[TimestampSeconds],
+    section: slice,
+    side: Side,
+) -> list[ScalarMetric]:
+    result = []
+    for angle_id, speed_id, timing_id, plane, direction in PITCH_SPEEDS:
+        track = next(track for track in tracks if track.metric_id == angle_id)
+        values, reason = _track_values(track, section)
+        speed = timing = None
+        if len(values):
+            try:
+                rates = np.rad2deg(_differentiate(values, _seconds(captured)))
+            except ValueError:
+                reason = "low_confidence"
+            else:
+                magnitudes = np.abs(rates) if direction == 0 else direction * rates
+                peak = int(np.argmax(magnitudes))
+                speed = max(0.0, float(magnitudes[peak]))
+                if speed < 1e-9:
+                    speed = 0.0
+                if speed > 0:
+                    first, last = captured[0].timestamp_sec, captured[-1].timestamp_sec
+                    timing = (captured[peak].timestamp_sec - first) / (last - first)
+        result.append(
+            _scalar(speed_id, "pitch_cycle", "deg_per_s", plane, speed, reason, side)
+        )
+        if timing_id is not None:
+            result.append(
+                _scalar(
+                    timing_id,
+                    "pitch_cycle",
+                    "dimensionless",
+                    "temporal",
+                    timing,
+                    None if timing is not None else reason or "unidentifiable_axis",
+                    side,
+                )
+            )
+    return result
+
+
+def _linear_metrics(
+    movement: Movement,
+    positions: dict[CaptureEventID, int],
+    frames: list[dict[str, AngularPoint]],
+    timestamps: list[TimestampSeconds],
+    world_basis: FloatArray | None,
+    side: Side,
+) -> list[ScalarMetric]:
+    if movement == "running":
+        start, end = (
+            positions.get("run_initial_contact"),
+            positions.get("run_next_initial_contact"),
+        )
+        reason: MissingReason = (
+            "insufficient_calibration" if world_basis is None else "occluded"
+        )
+        length = speed = None
+        if start is not None and end is not None and world_basis is not None:
+            first, last = (frames[index].get(f"{side}_heel") for index in (start, end))
+            if isinstance(first, CalibratedWorld3D) and isinstance(
+                last, CalibratedWorld3D
+            ):
+                length = float(_difference(last, first) @ world_basis[:, 0])
+                if length >= 0:
+                    speed = length / (
+                        timestamps[end].timestamp_sec - timestamps[start].timestamp_sec
+                    )
+                else:
+                    length, reason = None, "low_confidence"
+        return [
+            _scalar(
+                "run_stride_length",
+                "run_stride",
+                "m",
+                "temporal",
+                length,
+                reason if length is None else None,
+                side,
+            ),
+            _scalar(
+                "run_mean_forward_speed",
+                "run_stride",
+                "m_per_s",
+                "temporal",
+                speed,
+                reason if speed is None else None,
+                side,
+            ),
+        ]
+
+    takeoff: CaptureEventID = "cmj_takeoff" if movement == "cmj" else "dvj_takeoff"
+    landing: CaptureEventID = (
+        "cmj_initial_landing_contact"
+        if movement == "cmj"
+        else "dvj_rebound_landing_contact"
+    )
+    start = positions.get(takeoff)
+    flight = _interval(positions, takeoff, landing)
+    reason = "insufficient_calibration" if world_basis is None else "occluded"
+    rise = speed = None
+    if start is not None and world_basis is not None:
+        vertical = world_basis[:, 1]
+        if flight is not None:
+            com = [frame.get("center_of_mass") for frame in frames[flight]]
+            if all(isinstance(point, CalibratedWorld3D) for point in com):
+                heights = (
+                    np.array([point.axes() for point in com if point is not None])
+                    @ vertical
+                )
+                rise = float(np.max(heights) - heights[0])
+        # Use the samples immediately before and after take-off on the capture clock.
+        section = slice(max(start - 1, 0), start + 2)
+        points = [frame.get("center_of_mass") for frame in frames[section]]
+        if len(points) >= 2 and all(
+            isinstance(point, CalibratedWorld3D) for point in points
+        ):
+            calibrated = [
+                point for point in points if isinstance(point, CalibratedWorld3D)
+            ]
+            try:
+                velocity = linear_velocity_m_per_s(calibrated, timestamps[section])
+            except ValueError:
+                reason = "low_confidence"
+            else:
+                speed = float(velocity[start - (section.start or 0)] @ vertical)
+    return [
+        _scalar(
+            "jump_com_rise",
+            takeoff,
+            "m",
+            "vertical_axis",
+            rise,
+            reason if rise is None else None,
+        ),
+        _scalar(
+            "jump_takeoff_vertical_com_velocity",
+            takeoff,
+            "m_per_s",
+            "vertical_axis",
+            speed,
+            reason if speed is None else None,
+        ),
+    ]
+
+
+def _cadence(
+    events: Sequence[CaptureEvent], captured: list[TimestampSeconds], section: slice
+) -> float | None:
+    first, last = (
+        captured[section][0].timestamp_sec,
+        captured[section][-1].timestamp_sec,
+    )
+    contacts = {
+        (event.timestamp_sec, event.side)
+        for event in events
+        if event.event_id in ("run_initial_contact", "run_next_initial_contact")
+        and event.side is not None
+        and first <= event.timestamp_sec <= last
+    }
+    steps = sorted(contacts)
+    if len(steps) < 2 or any(a[0] == b[0] or a[1] == b[1] for a, b in pairwise(steps)):
+        return None
+    return 60 * (len(steps) - 1) / (steps[-1][0] - steps[0][0])
 
 
 def calculate_kinematics(
@@ -358,129 +822,195 @@ def calculate_kinematics(
     movement: Movement,
     events: Sequence[CaptureEvent],
     analysis_revision_id: str,
+    *,
+    world_basis: FloatArray | None = None,
+    projected: bool = False,
 ) -> tuple[Pose3DSequence, KinematicMetrics, FloatArray]:
-    if pose.coordinate_frame != "CalibratedWorld3D":
-        raise ValueError("calibrated kinematics requires metric world coordinates")
+    """Calculate angles and event metrics. Basis columns are forward, up and right.
+
+    Jump translation metrics use the supplied whole-body center_of_mass landmark.
+    """
+    if world_basis is not None:
+        if pose.coordinate_frame != "CalibratedWorld3D":
+            raise TypeError("metric axes require calibrated world coordinates")
+        world_basis = verify_rotation(world_basis)
+    metric = pose.coordinate_frame == "CalibratedWorld3D"
+    if metric != pose.is_metric_calibrated:
+        raise TypeError("coordinate frame and calibration flag disagree")
     spec = METRICS[movement]
     by_frame = {frame.frame_index: index for index, frame in enumerate(pose.frames)}
     timestamps = [
         TimestampSeconds(timestamp_sec=frame.timestamp_sec) for frame in pose.frames
     ]
-    event_positions: dict[CaptureEventID, int] = {}
+    sides: tuple[Side, ...] = ("right", "left")
+    groups: dict[Side | None, dict[CaptureEventID, int]] = {
+        None: {},
+        "left": {},
+        "right": {},
+    }
     for event in events:
         index = by_frame.get(event.frame_index)
         if index is None or timestamps[index].timestamp_sec != event.timestamp_sec:
             raise ValueError("event must match a captured frame and timestamp")
-        if event.side == "left":
-            continue
-        if event.event_id in event_positions:
+        if event.event_id in groups[event.side]:
             raise ValueError("duplicate event on the selected side")
-        event_positions[event.event_id] = index
-    start, end = event_positions.get(spec.first), event_positions.get(spec.last)
-    if (start is None) != (end is None) or (
-        start is not None and end is not None and start >= end
-    ):
-        raise ValueError("event interval requires ordered start and end captures")
+        groups[event.side][event.event_id] = index
 
-    angles = np.full(len(pose.frames), np.nan)
-    reasons: list[MissingReason | None] = []
-    bones: dict[tuple[str, str], list[tuple[CalibratedWorld3D, CalibratedWorld3D]]] = {
-        (proximal, distal): []
-        for proximal, distal in (
-            ("right_hip", "right_knee"),
-            ("right_knee", "right_ankle"),
-            ("right_shoulder", "right_elbow"),
-            ("right_elbow", "right_wrist"),
-        )
-    }
-    required = ARM if movement == "baseball_pitching" else LEG
-    for index, frame in enumerate(pose.frames):
-        points: dict[str, CalibratedWorld3D] = {}
-        missing: dict[str, MissingReason] = {}
-        for point in frame.landmarks:
-            if point.x is not None and point.y is not None and point.z is not None:
-                points[point.landmark_id] = CalibratedWorld3D(
-                    x=point.x, y=point.y, z=point.z
-                )
-            elif point.missing_reason is not None:
-                missing[point.landmark_id] = point.missing_reason
-        for center, left, right in BONE_CENTERS:
-            if center not in points and left in points and right in points:
-                points[center] = _midpoint(points[left], points[right])
-        for pair, track in bones.items():
-            a, b = pair
-            if a in points and b in points:
-                track.append((points[a], points[b]))
-        reason = next(
-            (missing.get(name, "occluded") for name in required if name not in points),
-            None,
-        )
-        if reason is None:
-            try:
-                angles[index] = _flexion(points, movement).value
-            except ValueError:
-                reason = "unidentifiable_axis"
-        reasons.append(reason)
-
-    stability = [
-        sd for track in bones.values() if (sd := bone_length_sd_mm(track)) is not None
+    frames = [_frame_points(frame, metric) for frame in pose.frames]
+    missing = [
+        {p.landmark_id: p.missing_reason for p in frame.landmarks}
+        for frame in pose.frames
     ]
+    stability = []
+    if metric:
+        for side in sides:
+            for link in BONE_LINKS:
+                first, second = (f"{side}_{name}" for name in link)
+                endpoints = [(frame.get(first), frame.get(second)) for frame in frames]
+                sd = bone_length_sd_mm(
+                    [
+                        (a, b)
+                        for a, b in endpoints
+                        if isinstance(a, CalibratedWorld3D)
+                        and isinstance(b, CalibratedWorld3D)
+                    ]
+                )
+                if sd is not None:
+                    stability.append(sd)
     pose = pose.model_copy(
         update={"bone_length_stability_mm": max(stability, default=None)}
     )
-    metrics = [
-        ScalarMetric(
-            metric_id=spec.metric_id,
-            event_id=event_id,
-            value_or_null=degrees(angles[index]) if reasons[index] is None else None,
-            unit="deg",
-            anatomical_plane="sagittal",
-            missing_reason_or_null=reasons[index],
-            side="right",
-        )
-        for event_id, index in event_positions.items()
-    ]
-    waveforms = []
-    if start is not None and end is not None:
-        section = slice(start, end + 1)
-        captured = timestamps[section]
-        missing_reason = next(
-            (reason for reason in reasons[section] if reason is not None), None
-        )
-        if missing_reason is None:
-            waveforms.append(
-                NormalizedWaveform(
-                    metric_id=spec.metric_id,
-                    interval_id=spec.interval,
-                    unit="deg",
-                    anatomical_plane="sagittal",
-                    side="right",
-                    points=normalize_events(
-                        captured, np.rad2deg(angles[section]), captured[0], captured[-1]
-                    ),
-                )
-            )
-        if movement == "baseball_pitching":
-            speed = None
-            if missing_reason is None:
-                velocity = angular_velocity(
-                    [Radians(value=float(angle)) for angle in angles[section]], captured
-                )
-                speed = max(
-                    0.0, -min(rate.to_degrees_per_second().value for rate in velocity)
-                )
-            metrics.append(
-                ScalarMetric(
-                    metric_id="pitch_elbow_peak_extension_angular_velocity",
-                    event_id=spec.interval,
-                    value_or_null=speed,
-                    unit="deg_per_s",
-                    anatomical_plane="sagittal",
-                    side="right",
-                    missing_reason_or_null=missing_reason,
-                )
-            )
 
+    scalars: list[ScalarMetric] = []
+    waveforms: list[NormalizedWaveform] = []
+    series = np.full(len(frames), np.nan)
+    active_sides = tuple(side for side in sides if groups[side])
+    if movement in LANDING_EVENTS and (groups[None] or active_sides):
+        active_sides = sides
+    elif not active_sides:
+        active_sides = ("right",)
+    if movement in LANDING_EVENTS:
+        jump_events = groups["left"] | groups["right"] | groups[None]
+        scalars.extend(
+            _linear_metrics(
+                movement, jump_events, frames, timestamps, world_basis, active_sides[0]
+            )
+        )
+
+    cadence: float | None = None
+    for side in active_sides:
+        positions = (
+            jump_events | groups[side]
+            if movement in LANDING_EVENTS
+            else groups[None] | groups[side]
+        )
+        positions = {
+            event_id: index
+            for event_id, index in positions.items()
+            if event_id.startswith(spec.first.split("_", 1)[0] + "_")
+        }
+        section = _interval(positions, spec.first, spec.last)
+        stance = (
+            _interval(positions, "run_initial_contact", "run_toe_off")
+            if movement == "running"
+            else None
+        )
+        measured = [
+            _angles_for_frame(
+                frame.__getitem__,
+                reasons,
+                movement,
+                side,
+                world_basis,
+                projected,
+                metric,
+            )
+            for frame, reasons in zip(frames, missing, strict=True)
+        ]
+        tracks = [
+            AngleTrack(
+                column[0][0], column[0][1], [entry[2] for entry in column], column[0][3]
+            )
+            for column in zip(*measured, strict=True)
+        ]
+        if side == active_sides[0]:
+            primary = next(
+                track for track in tracks if track.metric_id == spec.metric_id
+            )
+            series = np.rad2deg(
+                np.array(
+                    [sample.radians for sample in primary.samples], dtype=np.float64
+                )
+            )
+        if movement == "running":
+            scalars.extend(
+                _linear_metrics(
+                    movement, positions, frames, timestamps, world_basis, side
+                )
+            )
+            if section is not None and cadence is None:
+                cadence = _cadence(events, timestamps, section)
+        elif movement == "baseball_pitching" and section is not None:
+            scalars.extend(_pitch_peaks(tracks, timestamps[section], section, side))
+
+        for track in tracks:
+            interval: IntervalID = "run_stance" if track.stance_only else spec.interval
+            window = stance if track.stance_only else section
+            if window is not None:
+                values, _ = _track_values(track, window)
+                if len(values):
+                    captured = timestamps[window]
+                    waveforms.append(
+                        NormalizedWaveform(
+                            metric_id=track.metric_id,
+                            interval_id=interval,
+                            unit="deg",
+                            anatomical_plane=track.plane,
+                            side=side,
+                            points=normalize_events(
+                                captured, np.rad2deg(values), captured[0], captured[-1]
+                            ),
+                        )
+                    )
+            for event_id, index in positions.items():
+                if (
+                    movement in LANDING_EVENTS
+                    and event_id not in LANDING_EVENTS[movement]
+                ):
+                    continue
+                if track.stance_only and event_id not in (
+                    "run_initial_contact",
+                    "run_mid_stance",
+                    "run_toe_off",
+                ):
+                    continue
+                value = track.samples[index]
+                scalars.append(
+                    _scalar(
+                        track.metric_id,
+                        event_id,
+                        "deg",
+                        track.plane,
+                        None
+                        if value.radians is None
+                        else float(np.rad2deg(value.radians)),
+                        value.reason,
+                        side,
+                    )
+                )
+
+    if movement == "running":
+        scalars.insert(
+            0,
+            _scalar(
+                "run_cadence",
+                "run_stride",
+                "spm",
+                "temporal",
+                cadence,
+                None if cadence is not None else "occluded",
+            ),
+        )
     return (
         pose,
         KinematicMetrics(
@@ -489,8 +1019,8 @@ def calculate_kinematics(
             movement_type=movement,
             provenance=pose.provenance,
             events=list(events),
-            scalar_metrics=metrics,
+            scalar_metrics=scalars,
             normalized_waveforms=waveforms,
         ),
-        np.rad2deg(angles),
+        series,
     )

@@ -9,6 +9,7 @@ from .contracts import (
     DLTCalibration,
     DLTCheck,
     DLTView,
+    Intrinsics,
     StereoCalibration,
     StereoCheck,
     StereoView,
@@ -209,17 +210,30 @@ class BoardObservation:
     first_px: FloatArray
     second_px: FloatArray
 
-    def corrected(self, views: StereoPair) -> tuple[FloatArray, FloatArray, FloatArray]:
+    def matched(self) -> tuple[FloatArray, FloatArray, FloatArray]:
         board = points_array(self.board_m, 3)
-        left = undistort_pixels(self.first_px, views[0])
-        right = undistort_pixels(self.second_px, views[1])
+        left = points_array(self.first_px, 2)
+        right = points_array(self.second_px, 2)
         if len(board) < 6 or len(board) != len(left) or len(board) != len(right):
             raise ValueError(
                 "stereo calibration requires six or more matched board corners"
             )
         if np.linalg.matrix_rank(board - board.mean(axis=0), tol=1e-10) != 2:
             raise ValueError("board points must span a plane")
+        if any(
+            np.linalg.matrix_rank(pixels - pixels.mean(axis=0)) != 2
+            for pixels in (left, right)
+        ):
+            raise ValueError("board corners must span both image axes")
         return board, left, right
+
+    def corrected(self, views: StereoPair) -> tuple[FloatArray, FloatArray, FloatArray]:
+        board, left, right = self.matched()
+        return (
+            board,
+            undistort_pixels(left, views[0]),
+            undistort_pixels(right, views[1]),
+        )
 
 
 def fit_stereo_calibration(
@@ -251,9 +265,119 @@ def fit_stereo_calibration(
         image_size_px,
         flags=cv2.CALIB_FIX_INTRINSIC,
     )
+    return _checked_stereo(
+        calibration_id,
+        contract_version,
+        views,
+        rms,
+        np.asarray(rotation, dtype=np.float64),
+        np.asarray(translation, dtype=np.float64),
+        held_out,
+    )
+
+
+def calibrate_checkerboard_stereo(
+    calibration_id: str,
+    contract_version: str,
+    view_ids: tuple[str, str],
+    image_size_px: tuple[int, int],
+    observations: Sequence[BoardObservation],
+    held_out: Sequence[BoardObservation],
+) -> StereoCalibration:
+    """Fit both cameras from matched planar board coordinates in meters.
+
+    Supply diverse board poses with local Z=0 and separate held-out captures.
+    Checkerboard or ChArUco corners must use the same correspondence order.
+    """
+    if len(observations) < 3 or not held_out or min(image_size_px) <= 0:
+        raise ValueError(
+            "stereo calibration needs three fit boards, held-out boards and image dimensions"
+        )
+    if view_ids[0] == view_ids[1]:
+        raise ValueError("calibration views must be distinct")
+    fit = [observation.matched() for observation in observations]
+    if any(np.any(np.abs(obj[:, 2]) > 1e-10) for obj, _, _ in fit):
+        raise ValueError("intrinsic calibration requires board-local corners with Z=0")
+    board, left, right = (
+        [sample[column].astype(np.float32) for sample in fit] for column in range(3)
+    )
+    criteria = (cv2.TERM_CRITERIA_COUNT | cv2.TERM_CRITERIA_EPS, 100, 1e-10)
+    try:
+        _, k0, d0, rotations, _, *_ = cv2.calibrateCamera(
+            board, left, image_size_px, None, None, criteria=criteria
+        )
+        _, k1, d1, *_ = cv2.calibrateCamera(
+            board, right, image_size_px, None, None, criteria=criteria
+        )
+        normals = np.stack([cv2.Rodrigues(r)[0][:, 2] for r in rotations])
+        if np.linalg.matrix_rank(normals, tol=1e-3) < 3:
+            raise ValueError(
+                "intrinsic calibration requires board tilt about both axes"
+            )
+        rms, k0, d0, k1, d1, rotation, translation, _, _ = cv2.stereoCalibrate(
+            board,
+            left,
+            right,
+            k0,
+            d0,
+            k1,
+            d1,
+            image_size_px,
+            criteria=criteria,
+            flags=cv2.CALIB_USE_INTRINSIC_GUESS,
+        )
+    except cv2.error as error:
+        raise ValueError("checkerboard camera calibration failed") from error
+
+    views = tuple(
+        StereoView(
+            view_id=view_id,
+            intrinsics=Intrinsics(
+                fx_px=float(matrix[0, 0]),
+                fy_px=float(matrix[1, 1]),
+                cx_px=float(matrix[0, 2]),
+                cy_px=float(matrix[1, 2]),
+            ),
+            distortion_coefficients=distortion.ravel().tolist(),
+        )
+        for view_id, matrix, distortion in zip(
+            view_ids, (k0, k1), (d0, d1), strict=True
+        )
+    )
+    try:
+        result = _checked_stereo(
+            calibration_id,
+            contract_version,
+            (views[0], views[1]),
+            rms,
+            np.asarray(rotation, dtype=np.float64),
+            np.asarray(translation, dtype=np.float64),
+            held_out,
+        )
+    except cv2.error as error:
+        raise ValueError("held-out checkerboard verification failed") from error
+    if max(result.fit_rms_px, result.held_out_check.reprojection_error_px) >= 0.5:
+        raise ValueError("stereo calibration reprojection RMSE must be below 0.5 px")
+    return result
+
+
+def _checked_stereo(
+    calibration_id: str,
+    contract_version: str,
+    views: StereoPair,
+    rms: float,
+    rotation: FloatArray,
+    translation: FloatArray,
+    held_out: Sequence[BoardObservation],
+) -> StereoCalibration:
+    from .kinematics import verify_rotation
+
+    verify_rotation(rotation)
     translation = translation.ravel()
     if not np.isfinite(translation).all() or np.linalg.norm(translation) < 1e-9:
         raise ValueError("stereo calibration needs a nonzero camera baseline")
+    k0, k1 = (camera_matrix(view) for view in views)
+    projection = k1 @ np.column_stack((rotation, translation))
     errors = []
     for observation in held_out:
         obj, left_px, right_px = observation.corrected(views)
@@ -262,7 +386,8 @@ def fit_stereo_calibration(
             raise ValueError("held-out board pose could not be determined")
         board_matrix, _ = cv2.Rodrigues(board_rotation)
         first_camera_m = obj @ board_matrix.T + board_translation.ravel()
-        projection = k1 @ np.column_stack((rotation, translation))
+        if np.any(first_camera_m[:, 2] <= 0):
+            raise ValueError("held-out board must be in front of both cameras")
         errors.append(project_world_pixels(projection, first_camera_m) - right_px)
     return StereoCalibration(
         contract_version=contract_version,
@@ -286,6 +411,8 @@ def projection_cameras(
     """Use the control-pole frame for DLT and the first camera's metric frame for stereo."""
     if isinstance(calibration, DLTCalibration):
         return [dlt_camera(view) for view in calibration.views], "dlt"
+    if not isinstance(calibration, StereoCalibration):
+        raise TypeError("metric projection requires a two-view calibration")
 
     from .kinematics import verify_rotation
 
