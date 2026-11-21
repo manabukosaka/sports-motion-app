@@ -1,10 +1,12 @@
 import { useAsyncStorage } from "@react-native-async-storage/async-storage";
 import clone from "@ungap/structured-clone";
 import { registerRootComponent } from "expo";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Platform } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import type { EditingRecomputeResult } from "./src/editing-studio.js";
 import { SportsMotionApp } from "./src/ui/App.js";
-import { createDemo } from "./src/ui/demo.js";
+import { createDemo, createLiveDemo, readLiveDemoConfig } from "./src/ui/demo.js";
 import type { CaptureQueueItem, CaptureSelection } from "./src/ui/screens/CaptureScreen.js";
 
 const queueKey = "sports-motion-demo-capture-v1";
@@ -34,7 +36,7 @@ function readQueueItem(value: unknown): CaptureQueueItem | undefined {
 export default function App() {
   const storage = useAsyncStorage(queueKey);
   const [getItem] = useState(() => storage.getItem);
-  const [demo] = useState(createDemo);
+
   const [selection, setSelection] = useState<CaptureSelection>({
     movement: "running",
     coordinateFrame: "HipRelative3D",
@@ -43,6 +45,46 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [storageError, setStorageError] = useState(false);
   const writing = useRef(false);
+  const selectionCommitted = useRef(false);
+  const [config, setConfig] = useState<ReturnType<typeof readLiveDemoConfig>>();
+  const [recomputed, setRecomputed] = useState<EditingRecomputeResult>();
+  const sample = useMemo(() => createDemo(selection.movement), [selection.movement]);
+  const live = useMemo(() => config && createLiveDemo(config), [config]);
+  const liveData = useMemo(
+    () =>
+      config && live && recomputed
+        ? createLiveDemo(config, recomputed, live.editing.controller)
+        : live,
+    [config, live, recomputed],
+  );
+  const activeLive =
+    selection.movement === "running" && selection.coordinateFrame === "CalibratedWorld3D"
+      ? liveData
+      : undefined;
+  const demo = activeLive ?? sample;
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const request = new AbortController();
+    const load = async () => {
+      try {
+        const response = await fetch("/demo-config.json", {
+          cache: "no-store",
+          signal: request.signal,
+        });
+        if (!response.ok || !response.headers.get("content-type")?.startsWith("application/json"))
+          return;
+        const data = readLiveDemoConfig(await response.json());
+        if (!data || request.signal.aborted) return;
+        setConfig(data);
+        if (!selectionCommitted.current)
+          setSelection({ movement: "running", coordinateFrame: "CalibratedWorld3D" });
+      } catch {
+        // Standalone Expo builds use the bundled sample.
+      }
+    };
+    void load();
+    return () => request.abort();
+  }, []);
   useEffect(() => {
     let active = true;
     const load = async () => {
@@ -66,6 +108,7 @@ export default function App() {
   }, [getItem]);
   const saveCapture = async () => {
     if (!ready || writing.current) return;
+    selectionCommitted.current = true;
     const capture_id = `demo-${selection.movement}-${selection.coordinateFrame}`;
     if (queue.some((item) => item.capture_id === capture_id)) return;
     const next: CaptureQueueItem[] = [
@@ -87,14 +130,20 @@ export default function App() {
     <SafeAreaProvider>
       <SportsMotionApp
         {...demo}
+        editing={activeLive ? { ...demo.editing, onRecomputed: setRecomputed } : demo.editing}
         {...(storageError && {
           notice: "デモデータを表示中。端末の撮影記録にアクセスできません。",
         })}
         capture={{
           selection,
-          onSelect: setSelection,
+          onSelect: (next) => {
+            selectionCommitted.current = true;
+            setSelection(next);
+          },
+          live: Boolean(activeLive),
           queue,
-          ...(ready && { onSaveCapture: () => void saveCapture() }),
+          loading: !ready,
+          onSaveCapture: saveCapture,
         }}
       />
     </SafeAreaProvider>

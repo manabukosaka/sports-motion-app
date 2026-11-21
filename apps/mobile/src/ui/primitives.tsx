@@ -1,142 +1,373 @@
-import type { CSSProperties, ReactNode } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import type {
+  ActionProps,
+  ChoiceCardProps,
+  FooterProps,
+  GuideProps,
+  LoupeProps,
+  ScrubberProps,
+  StatProps,
+  StepperProps,
+} from "./primitive-types.js";
 import { colors } from "./theme.js";
+import { skeletonSegments } from "./visual-data.js";
+import { webStyles } from "./web-styles.js";
 
-export interface ActionProps {
-  children: string;
-  onPress: () => void;
-  selected?: boolean;
-  disabled?: boolean;
-}
+export { SkeletonCanvas2D, SkeletonPreview3D, TrendChart, WaveformChart } from "./visuals.js";
 
-export interface ScrubberProps {
-  label: string;
-  value: number;
-  onChange: (value: number) => void;
-}
-
-export interface LoupeProps {
-  width: number;
-  height: number;
-  x: number;
-  y: number;
-  zoom: number;
-  frameWidth: number;
-  frameHeight: number;
-  focusX: number;
-  focusY: number;
-  points: readonly { id: string; left: number; top: number }[];
-}
-
-const stack: CSSProperties = { display: "flex", flexDirection: "column", gap: 12 };
-
-export function Page({ children }: { children: ReactNode }) {
+export function Page({ children, focusKey }: { children: ReactNode; focusKey?: string }) {
+  const main = useRef<HTMLElement>(null);
+  const previous = useRef(focusKey);
+  useEffect(() => {
+    if (previous.current === focusKey) return;
+    previous.current = focusKey;
+    main.current?.querySelector<HTMLVideoElement>("[hidden] video")?.pause();
+    main.current?.querySelector<HTMLElement>("h1:not([hidden] h1)")?.focus({ preventScroll: true });
+    main.current?.scrollIntoView({ block: "start" });
+  }, [focusKey]);
   return (
-    <main
-      lang="ja"
-      style={{
-        background: colors.canvas,
-        color: colors.ink,
-        minHeight: "100vh",
-        padding: "24px 16px",
-        boxSizing: "border-box",
-        fontFamily: "system-ui, sans-serif",
-      }}
-    >
-      <div style={{ ...stack, maxWidth: 720, margin: "0 auto" }}>{children}</div>
+    <main ref={main} lang="ja" className="sm">
+      <style>{webStyles}</style>
+      <div className="sm-shell">{children}</div>
     </main>
+  );
+}
+
+export function Header({ children }: { children: ReactNode }) {
+  return (
+    <header className="sm-header">
+      <div className="sm-brand">
+        <div className="sm-brand-icon" aria-hidden="true">
+          <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M3 16h4l4-9 3 11 3-6h4"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+        <div>
+          <strong>Sports Motion</strong>
+          <small>3D動作解析・コーチング</small>
+        </div>
+      </div>
+      <Row>{children}</Row>
+    </header>
+  );
+}
+
+export function Stepper({ steps, active, visited, onSelect }: StepperProps) {
+  return (
+    <nav aria-label="解析の進捗">
+      <ol className="sm-steps">
+        {steps.map((label, index) => (
+          <li key={label}>
+            <button
+              type="button"
+              className="sm-step"
+              aria-current={index === active ? "step" : undefined}
+              data-visited={visited.has(index)}
+              onClick={() => onSelect(index)}
+            >
+              <span className="sm-step-number">
+                {index !== active && visited.has(index) ? "✓" : index + 1}
+              </span>
+              <strong>{label}</strong>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </nav>
   );
 }
 
 export function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section
-      aria-label={title}
-      style={{
-        ...stack,
-        border: `1px solid ${colors.border}`,
-        borderRadius: 16,
-        background: colors.surface,
-        padding: 16,
-      }}
-    >
-      <h2 style={{ margin: 0, fontSize: 19 }}>{title}</h2>
+    <section aria-label={title} className="sm-panel">
+      <h2>{title}</h2>
       {children}
     </section>
   );
 }
 
-export function Title({ children }: { children: string }) {
-  return <h1 style={{ margin: 0, fontSize: 30, letterSpacing: -0.8 }}>{children}</h1>;
+export function Title({ children, subtitle }: { children: string; subtitle?: string }) {
+  return (
+    <div className="sm-heading">
+      <h1 tabIndex={-1}>{children}</h1>
+      {subtitle && <p>{subtitle}</p>}
+    </div>
+  );
 }
 
 export function Row({ children }: { children: ReactNode }) {
-  return <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{children}</div>;
+  return <div className="sm-row">{children}</div>;
+}
+
+export function Grid({
+  children,
+  layout,
+}: {
+  children: ReactNode;
+  layout?: "split" | "equal" | "choices";
+}) {
+  return (
+    <div className="sm-grid" data-layout={layout}>
+      {children}
+    </div>
+  );
+}
+
+export function ViewSlot({ children, hidden }: { children: ReactNode; hidden: boolean }) {
+  return (
+    <div hidden={hidden} className={hidden ? undefined : "sm-grid"}>
+      {children}
+    </div>
+  );
 }
 
 export function Copy({ children }: { children: ReactNode }) {
-  return <p style={{ margin: 0, lineHeight: 1.5, overflowWrap: "anywhere" }}>{children}</p>;
+  return <p className="sm-copy">{children}</p>;
 }
 
 export function Notice({
   children,
   nonDiagnostic = false,
+  tone = "warning",
 }: {
   children: string;
   nonDiagnostic?: boolean;
+  tone?: "warning" | "success";
 }) {
   return (
     <p
+      className="sm-notice"
+      data-tone={tone}
       role={nonDiagnostic ? "note" : "status"}
       data-non-diagnostic={nonDiagnostic ? "true" : undefined}
-      style={{
-        margin: 0,
-        padding: "10px 12px",
-        borderRadius: 8,
-        background: colors.warningSurface,
-        color: colors.warning,
-      }}
     >
       {children}
     </p>
   );
 }
 
-export function Action({ children, onPress, selected, disabled }: ActionProps) {
+export function Action({
+  children,
+  onPress,
+  selected,
+  disabled,
+  variant = "secondary",
+}: ActionProps) {
   return (
     <button
       type="button"
       onClick={onPress}
       aria-pressed={selected}
       disabled={disabled}
-      style={{
-        background: selected ? colors.accent : colors.tint,
-        color: selected ? colors.surface : colors.accent,
-        border: 0,
-        borderRadius: 8,
-        minHeight: 44,
-        padding: "8px 12px",
-        font: "inherit",
-        fontWeight: 600,
-        opacity: disabled ? 0.55 : 1,
-        cursor: disabled ? "default" : "pointer",
-      }}
+      className="sm-action"
+      data-variant={variant}
     >
       {children}
     </button>
   );
 }
 
+export function Footer({ onBack, children }: FooterProps) {
+  return (
+    <div className="sm-footer">
+      {onBack && (
+        <Action variant="ghost" onPress={onBack}>
+          ← 戻る
+        </Action>
+      )}
+      <div>{children}</div>
+    </div>
+  );
+}
+
+export function ChoiceCard({ label, description, icon, selected, onPress }: ChoiceCardProps) {
+  return (
+    <button type="button" aria-pressed={selected} onClick={onPress} className="sm-choice">
+      <span aria-hidden="true" className="sm-choice-icon">
+        {icon}
+      </span>
+      <span>
+        <strong>{label}</strong>
+        <small>{description}</small>
+      </span>
+    </button>
+  );
+}
+
+export function GuideBanner({ badge, children, tone = "default" }: GuideProps) {
+  return (
+    <aside className="sm-guide" data-tone={tone} aria-live="polite">
+      <span className="sm-badge">{badge}</span>
+      <div>
+        <strong>次にやること</strong>
+        <p>{children}</p>
+      </div>
+    </aside>
+  );
+}
+
+export function StatGrid({ children }: { children: ReactNode }) {
+  return <div className="sm-stats">{children}</div>;
+}
+
+export function StatCard({ label, value, unit, trend }: StatProps) {
+  return (
+    <div className="sm-stat">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{unit}</small>
+      {trend && <em>{trend}</em>}
+    </div>
+  );
+}
+
+export function ToggleSwitch({
+  label,
+  checked,
+  onToggle,
+}: {
+  label: string;
+  checked: boolean;
+  onToggle?: (next: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={!onToggle}
+      onClick={() => onToggle?.(!checked)}
+      className="sm-switch"
+    >
+      {label}
+      <span aria-hidden="true" className="sm-switch-track" />
+    </button>
+  );
+}
+
 export function Link({ label, href }: { label: string; href: string }) {
   return (
-    <a href={href} target="_blank" rel="noreferrer" style={{ color: colors.accent }}>
+    <a className="sm-link" href={href} target="_blank" rel="noreferrer">
       {label}
     </a>
   );
 }
 
+export function ShareCard({ title, url }: { title: string; url?: string | undefined }) {
+  return url ? (
+    <img className="sm-line-image" src={url} alt={`LINE共有カード — ${title}`} />
+  ) : (
+    <div className="sm-line-card">
+      <span>LINE</span>
+      <strong>{title}</strong>
+      <small>3D動作レポート · 骨格の動きと試技の比較を確認できます。</small>
+    </div>
+  );
+}
+
+export function VideoDropzone({ onSample }: { onSample?: () => void }) {
+  const [video, setVideo] = useState<{ url: string; name: string }>();
+  const [dragging, setDragging] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(
+    () => () => {
+      if (video) URL.revokeObjectURL(video.url);
+    },
+    [video],
+  );
+  function choose(file?: File) {
+    if (!file) return;
+    if (!file.type.startsWith("video/") && !/\.(mp4|mov|webm)$/iu.test(file.name)) {
+      setError("MP4、MOV、WebMなどの動画ファイルを選んでください。");
+      return;
+    }
+    setError("");
+    setVideo({ url: URL.createObjectURL(file), name: file.name });
+  }
+  return (
+    <>
+      <label
+        className="sm-drop"
+        data-dragging={dragging}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          choose(event.dataTransfer.files[0]);
+        }}
+      >
+        <span className="sm-drop-icon" aria-hidden="true">
+          <svg
+            aria-hidden="true"
+            width="19"
+            height="19"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          >
+            <path
+              d="M12 16V4m-5 5 5-5 5 5M4 15v5h16v-5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+        <strong>{video ? "別の動画を選ぶ" : "動画ファイルを選ぶ"}</strong>
+        <small>{video?.name ?? "ドラッグ＆ドロップ · MP4 / MOV / WebM"}</small>
+        <input
+          className="sm-file"
+          type="file"
+          accept="video/*"
+          onChange={(event) => {
+            choose(event.currentTarget.files?.[0]);
+            event.currentTarget.value = "";
+          }}
+        />
+      </label>
+      {video && (
+        <video
+          key={video.url}
+          className="sm-video"
+          src={video.url}
+          controls
+          playsInline
+          aria-label={`動画プレビュー ${video.name}`}
+          onError={() => setError("この動画形式はお使いのブラウザーで再生できません。")}
+        >
+          <track kind="captions" />
+        </video>
+      )}
+      {error && <Notice>{error}</Notice>}
+      {onSample && (
+        <Action
+          variant="secondary"
+          onPress={() => {
+            setVideo(undefined);
+            setError("");
+            onSample();
+          }}
+        >
+          サンプル試技ですぐ体験
+        </Action>
+      )}
+    </>
+  );
+}
+
 export function Scrubber({ label, value, onChange }: ScrubberProps) {
   return (
-    <label style={stack}>
+    <label className="sm-scrubber">
       {label}
       <input
         type="range"
@@ -145,7 +376,6 @@ export function Scrubber({ label, value, onChange }: ScrubberProps) {
         step={0.1}
         value={value}
         onChange={(event) => onChange(event.currentTarget.valueAsNumber)}
-        style={{ accentColor: colors.accent }}
       />
     </label>
   );
@@ -164,61 +394,68 @@ export function Loupe({
   focusY,
 }: LoupeProps) {
   return (
-    <div
+    <svg
       role="img"
       aria-label={`拡大ルーペ ${zoom}倍。表示位置 x ${x.toFixed(1)} y ${y.toFixed(1)} px`}
       data-loupe-x={x}
       data-loupe-y={y}
-      style={{
-        position: "relative",
-        width: "100%",
-        maxWidth: Math.min(340, (220 * frameWidth) / frameHeight),
-        aspectRatio: frameWidth / frameHeight,
-        background: colors.canvas,
-        borderRadius: 8,
-      }}
+      viewBox={`0 0 ${frameWidth} ${frameHeight}`}
+      style={{ width: "100%", height: "auto", background: colors.dark, borderRadius: 12 }}
     >
-      <span
-        style={{
-          position: "absolute",
-          left: `${(focusX / frameWidth) * 100}%`,
-          top: `${(focusY / frameHeight) * 100}%`,
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          background: colors.accent,
-          transform: "translate(-50%, -50%)",
-        }}
+      <path
+        d={`M0 ${focusY}H${frameWidth} M${focusX} 0V${frameHeight}`}
+        stroke="#334155"
+        strokeDasharray="4 4"
       />
-      <div
-        style={{
-          position: "absolute",
-          left: `${(x / frameWidth) * 100}%`,
-          top: `${(y / frameHeight) * 100}%`,
-          width: `${(width / frameWidth) * 100}%`,
-          height: `${(height / frameHeight) * 100}%`,
-          boxSizing: "border-box",
-          border: `1px solid ${colors.accent}`,
-          background: colors.tint,
-          borderRadius: 8,
-        }}
+      <path
+        d={`M${focusX} ${focusY}L${x + width / 2} ${y + height / 2}`}
+        stroke="#99f6e4"
+        strokeWidth="1"
+      />
+      <circle cx={focusX} cy={focusY} r="6" fill="none" stroke="#5eead4" strokeWidth="1.5" />
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        fill={colors.darkRaised}
+        stroke="#5eead4"
+        rx="7"
+      />
+      <svg
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        aria-hidden="true"
       >
-        {points.map(({ id, left, top }) => (
-          <span
+        {skeletonSegments(
+          points.map(({ id, left, top, ...style }) => ({ id, x: left, y: top, ...style })),
+        ).map(({ id, a, b, color }) => (
+          <line
             key={id}
-            style={{
-              position: "absolute",
-              left: `${(left / width) * 100}%`,
-              top: `${(top / height) * 100}%`,
-              width: 6,
-              height: 6,
-              borderRadius: "50%",
-              background: colors.accent,
-              transform: "translate(-50%, -50%)",
-            }}
+            x1={a.x}
+            y1={a.y}
+            x2={b.x}
+            y2={b.y}
+            stroke={color}
+            strokeWidth="4"
+            strokeDasharray={color === "#fb7185" ? "5 5" : undefined}
           />
         ))}
-      </div>
-    </div>
+        {points.map(({ id, left, top, color }) => (
+          <circle
+            key={id}
+            cx={left}
+            cy={top}
+            r={color ? 7 : 4}
+            fill={color ?? "#ccfbf1"}
+            stroke={colors.dark}
+            strokeWidth="1"
+          />
+        ))}
+      </svg>
+    </svg>
   );
 }

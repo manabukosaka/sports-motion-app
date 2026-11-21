@@ -161,6 +161,96 @@ try {
   statuses.mobile_html = mobile.status;
   statuses.mobile_script = script.status;
 
+  const configUrl = new URL("/demo-config.json", ready.mobileWebUrl);
+  const configResponse = await request("Live mobile demo config", configUrl, 200, jsonType);
+  assert.equal(configResponse.headers.get("cache-control"), "no-store");
+  assert.equal(configResponse.headers.get("referrer-policy"), "no-referrer");
+  const config = await configResponse.json();
+  assert.equal(config.apiBaseUrl, "/demo-api");
+  assert.equal(config.teamId, teamId);
+  assert.equal(config.bearerToken, bearerToken);
+  assert.equal(config.shareWebBaseUrl, new URL(ready.shareWebUrl).origin);
+  assert.equal(config.pose3d.coordinate_frame, "CalibratedWorld3D");
+  assert.equal(config.pose3d.is_metric_calibrated, true);
+  assert.equal(config.pose3d.frames.length, 80);
+  assert.equal(config.rawPose2d.trial_id, trialId);
+  assert.equal(config.rawPose2d.frames.length, 80);
+  assert.equal(config.kinematic_metrics.analysis_revision_id, config.analysis_revision_id);
+  assert.ok(config.kinematic_metrics.normalized_waveforms.length);
+  statuses.mobile_config = configResponse.status;
+
+  const crossOrigin = await request(
+    "Cross-origin demo config is denied",
+    configUrl,
+    403,
+    jsonType,
+    {
+      headers: { Origin: "https://example.invalid" },
+    },
+  );
+  statuses.mobile_config_cross_origin = crossOrigin.status;
+
+  const deniedWrite = await request(
+    "Proxy only accepts workflow mutations",
+    new URL(`/demo-api/teams/${teamId}/trials/${trialId}/analyze`, ready.mobileWebUrl),
+    405,
+    jsonType,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.bearerToken}`,
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    },
+  );
+  statuses.proxy_unexpected_write = deniedWrite.status;
+
+  const issueUrl = new URL(`/demo-api/teams/${teamId}/share-links`, ready.mobileWebUrl);
+  const issueOptions = {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: configUrl.origin },
+    body: JSON.stringify({
+      analysisRevisionId: config.analysis_revision_id,
+      evidenceSnapshotId: config.evidence_snapshot_id,
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+    }),
+  };
+  const proxyDenied = await request(
+    "Proxy preserves the authentication guard",
+    issueUrl,
+    404,
+    jsonType,
+    issueOptions,
+  );
+  statuses.proxy_share_unauthenticated = proxyDenied.status;
+  const issued = await request(
+    "Issue a new share link through mobile proxy",
+    issueUrl,
+    201,
+    jsonType,
+    {
+      ...issueOptions,
+      headers: { ...issueOptions.headers, Authorization: `Bearer ${config.bearerToken}` },
+    },
+  );
+  const link = await issued.json();
+  assert.notEqual(link.shareLinkId, ready.shareLinkId);
+  assert.ok(link.token);
+  statuses.proxy_share_issued = issued.status;
+
+  const signedUrl = new URL(
+    `/share/${encodeURIComponent(link.shareLinkId)}`,
+    config.shareWebBaseUrl,
+  );
+  signedUrl.searchParams.set("token", link.token);
+  const mobileReport = await request("Newly issued signed report", signedUrl, 200, htmlType);
+  assertShareHeaders(mobileReport);
+  const mobileReportHtml = await mobileReport.text();
+  assert.match(mobileReportHtml, /id="skeleton-canvas"/u);
+  assertNonDiagnostic(mobileReportHtml);
+  statuses.proxy_share_report = mobileReport.status;
+
   const state = JSON.parse(await readFile(join(stateDir, "state.json"), "utf8"));
   assert.ok(state.links.some(({ id }) => id === ready.shareLinkId));
   const analyzedFrames = state.analyses.map(({ pose3d }) => {
@@ -178,7 +268,7 @@ try {
   await assert.rejects(access(stateDir), { code: "ENOENT" });
   console.log(
     JSON.stringify({
-      checks_passed: 9,
+      checks_passed: Object.keys(statuses).length,
       statuses,
       python_calibrated_frames: analyzedFrames,
       mobile_bundle_bytes: bundleBytes,

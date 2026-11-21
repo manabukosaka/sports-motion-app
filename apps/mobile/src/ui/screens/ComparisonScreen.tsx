@@ -3,19 +3,36 @@ import type {
   CalibrationParams,
   EvidenceCatalog,
   KinematicMetrics,
+  Pose3DSequence,
 } from "@sports-motion/contracts";
 import { type CoachingCheckpoint, compareMetricsAgainstCatalog } from "@sports-motion/evidence";
 import { useEffect, useMemo, useState } from "react";
 import type { CoachingStudioSession } from "../../coaching-studio.js";
 import type { DisclosureMode } from "../mode.js";
 import { NonDiagnostic } from "../NonDiagnostic.js";
-import { Action, Copy, Panel, Row, Scrubber } from "../primitives.js";
+import {
+  Action,
+  Copy,
+  Grid,
+  GuideBanner,
+  Panel,
+  Row,
+  Scrubber,
+  SkeletonPreview3D,
+  StatCard,
+  StatGrid,
+  Title,
+  WaveformChart,
+} from "../primitives.js";
 
 export interface ComparisonScreenProps {
   mode: DisclosureMode;
   session: CoachingStudioSession;
   target: KinematicMetrics;
   catalog: EvidenceCatalog;
+  pose3d?: Pose3DSequence;
+  metricLabel?: string;
+  sourceLabel?: string;
   calibration?: CalibrationParams;
   cutoffsHz?: Readonly<Partial<Record<"high_speed_upper" | "trunk_lower" | "pooled", number>>>;
 }
@@ -66,6 +83,9 @@ export function ComparisonScreen({
   session,
   target,
   catalog,
+  pose3d,
+  metricLabel = "関節角度",
+  sourceLabel,
   calibration,
   cutoffsHz,
 }: ComparisonScreenProps) {
@@ -95,58 +115,84 @@ export function ComparisonScreen({
     },
     [session],
   );
+
+  const seek = (value: number) => setPlayback(session.seekPercent(value));
+  const unit = comparison.unit === "deg" ? "°" : comparison.unit;
+  const peakDelta = Number(comparison.peakDelta.toFixed(1));
+  const delta = `${peakDelta > 0 ? "+" : ""}${peakDelta.toFixed(1)}`;
   return (
     <>
-      <NonDiagnostic disclaimer_text_ja={comparison.disclaimer_text_ja} />
-      <Panel title="2試技の比較">
-        <Copy>動作の始まりを0%、終わりを100%として比較します。</Copy>
-        <Copy>
-          基準の試技 · 最大値 {comparison.peakBaseline.value.toFixed(2)} {comparison.unit}（
-          {comparison.peakBaseline.percent}%）
-        </Copy>
-        <Copy>
-          今回の試技 · 最大値 {comparison.peakTarget.value.toFixed(2)} {comparison.unit}（
-          {comparison.peakTarget.percent}%）
-        </Copy>
-        <Copy>
-          最大値の差 {comparison.peakDelta.toFixed(2)} {comparison.unit} · ピーク時点の差{" "}
-          {comparison.peakPhaseShiftPercent.toFixed(1)} pt
-        </Copy>
-        <Copy>
-          {mode === "researcher" ? "RMS差" : "動き全体のずれ"} {comparison.rmsDifference.toFixed(2)}{" "}
-          {comparison.unit}
-        </Copy>
+      <Title subtitle={`${metricLabel} · 前回の試技と今回の試技`}>試技の比較・指導</Title>
+      <GuideBanner badge="STEP 3">
+        再生ボタンや波形を操作して、前回の試技と今回のフォームの違いを確認しましょう。
+      </GuideBanner>
+      <StatGrid>
+        <StatCard label="今回の最大値" value={comparison.peakTarget.value.toFixed(1)} unit={unit} />
+        <StatCard label="前回との最大値差" value={delta} unit={unit} />
+        <StatCard
+          label={mode === "researcher" ? "動き全体のずれ（RMS）" : "動き全体のずれ"}
+          value={comparison.rmsDifference.toFixed(1)}
+          unit={unit}
+        />
+      </StatGrid>
+      <Grid {...(pose3d && { layout: "equal" as const })}>
+        {pose3d && (
+          <Panel title="3D骨格ビュー">
+            <SkeletonPreview3D
+              pose={pose3d}
+              frame={playback.targetFrame}
+              {...(sourceLabel && { caption: sourceLabel })}
+            />
+          </Panel>
+        )}
+        <Panel title="2試技の比較">
+          <WaveformChart comparison={comparison} percent={playback.percent} onSeek={seek} />
+        </Panel>
+      </Grid>
+      <Panel title="同期再生">
         <Row>
+          <Action
+            variant="secondary"
+            onPress={() => setPlayback(playback.playing ? session.pause() : session.play())}
+          >
+            {playback.playing ? "Ⅱ 一時停止" : "▶ 再生"}
+          </Action>
           {PLAYBACK_RATES.map((rate) => (
             <Action
               key={rate}
+              variant="chip"
               selected={playback.rate === rate}
               onPress={() => setPlayback(session.setPlaybackRate(rate))}
-            >
-              {`${rate === 1 ? "1.0" : rate}x`}
-            </Action>
+            >{`${rate === 1 ? "1.0" : rate}x`}</Action>
           ))}
-          <Action onPress={() => setPlayback(playback.playing ? session.pause() : session.play())}>
-            {playback.playing ? "一時停止" : "再生"}
-          </Action>
         </Row>
-        <Scrubber
-          label="2試技を同時に移動"
-          value={playback.percent}
-          onChange={(value) => setPlayback(session.seekPercent(value))}
-        />
+        <Scrubber label="2試技を同時に移動" value={playback.percent} onChange={seek} />
         <Copy>
           {playback.percent.toFixed(1)}% · 基準フレーム {playback.baselineFrame} · 今回フレーム{" "}
           {playback.targetFrame}
         </Copy>
-        <Copy>
-          描画注釈 {session.visibleAnnotationsAtCurrentFrame().length} /{" "}
-          {session.annotations.length} 件
-        </Copy>
+        {session.annotations.length > 0 && (
+          <Copy>
+            描画注釈 {session.visibleAnnotationsAtCurrentFrame().length} /{" "}
+            {session.annotations.length} 件
+          </Copy>
+        )}
       </Panel>
       <Panel title="文献との比較">
-        <NonDiagnostic disclaimer_text_ja={catalog.disclaimer_policy.user_facing_text_ja} />
-        {checkpoints.length === 0 && <Copy>同じ条件で比較できる文献の指標がありません。</Copy>}
+        {comparison.disclaimer_text_ja !== catalog.disclaimer_policy.user_facing_text_ja && (
+          <NonDiagnostic disclaimer_text_ja={catalog.disclaimer_policy.user_facing_text_ja} />
+        )}
+        {checkpoints.length === 0 && (
+          <>
+            <Panel title="フォームの確認ポイント">
+              <Copy>
+                今回の最大値は動作の {comparison.peakTarget.percent.toFixed(0)}%
+                地点です。この位置に移動して、前回と関節の位置を比べましょう。
+              </Copy>
+            </Panel>
+            <Copy>同じ条件で比較できる文献の指標がありません。</Copy>
+          </>
+        )}
         {checkpoints.map(({ coach_summary_ja, researcher_detail }, index) => (
           <Panel
             key={`${researcher_detail.study_id}-${researcher_detail.metric_id}-${researcher_detail.event_id}-${index}`}
@@ -223,6 +269,7 @@ export function ComparisonScreen({
           )}
         </Panel>
       )}
+      <NonDiagnostic disclaimer_text_ja={comparison.disclaimer_text_ja} />
     </>
   );
 }

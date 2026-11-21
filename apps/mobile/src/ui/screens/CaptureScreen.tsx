@@ -1,6 +1,15 @@
 import type { LocalCapture } from "../../walking-skeleton.js";
 import type { DisclosureMode } from "../mode.js";
-import { Action, Copy, Notice, Panel, Row } from "../primitives.js";
+import {
+  ChoiceCard,
+  Copy,
+  Grid,
+  GuideBanner,
+  Notice,
+  Panel,
+  Title,
+  VideoDropzone,
+} from "../primitives.js";
 
 export type CaptureMovement = LocalCapture["movement"];
 export type CaptureMode = "HipRelative3D" | "CalibratedWorld3D";
@@ -21,19 +30,26 @@ export interface CaptureScreenProps {
   selection: CaptureSelection;
   onSelect: (selection: CaptureSelection) => void;
   queue?: readonly CaptureQueueItem[];
-  onSaveCapture?: () => void;
+  onSaveCapture?: () => void | Promise<void>;
+  loading?: boolean;
+  onSample?: (() => void) | undefined;
+  live?: boolean;
 }
 
 const movements = {
-  baseball_pitching: "野球投球",
-  running: "ランニング",
-  jump_landing: "ジャンプ・着地 (CMJ/DVJ)",
-} satisfies Record<CaptureMovement, string>;
+  baseball_pitching: { label: "野球投球", description: "リリース前後の腕の動き", icon: "↗" },
+  running: { label: "ランニング", description: "接地から次の接地まで", icon: "⇢" },
+  jump_landing: { label: "ジャンプ・着地", description: "踏み切りと着地（CMJ/DVJ）", icon: "↑" },
+} satisfies Record<CaptureMovement, { label: string; description: string; icon: string }>;
 
 const captureModes = {
-  HipRelative3D: "かんたん1カメラ（参考角度）",
-  CalibratedWorld3D: "高精度2カメラ校正（実寸3D）",
-} satisfies Record<CaptureMode, string>;
+  HipRelative3D: { label: "かんたん1カメラ", description: "校正なしで参考角度を確認", icon: "1" },
+  CalibratedWorld3D: {
+    label: "高精度2カメラ校正",
+    description: "校正済みの2視点で実寸3Dを再構成",
+    icon: "2",
+  },
+} satisfies Record<CaptureMode, { label: string; description: string; icon: string }>;
 
 const statuses = {
   LocalCaptured: "端末に保存済み",
@@ -46,49 +62,75 @@ export function CaptureScreen({
   selection,
   onSelect,
   queue = [],
-  onSaveCapture,
+  onSample,
+  live,
 }: CaptureScreenProps) {
   return (
     <>
-      <Panel title="撮影する動作">
-        <Row>
-          {(Object.keys(movements) as CaptureMovement[]).map((movement) => (
-            <Action
-              key={movement}
-              selected={selection.movement === movement}
-              onPress={() => onSelect({ ...selection, movement })}
-            >
-              {movements[movement]}
-            </Action>
-          ))}
-        </Row>
-      </Panel>
-      <Panel title="撮影方法">
-        <Row>
-          {(Object.keys(captureModes) as CaptureMode[]).map((coordinateFrame) => (
-            <Action
-              key={coordinateFrame}
-              selected={selection.coordinateFrame === coordinateFrame}
-              onPress={() => onSelect({ ...selection, coordinateFrame })}
-            >
-              {captureModes[coordinateFrame]}
-            </Action>
-          ))}
-        </Row>
-        {selection.coordinateFrame === "CalibratedWorld3D" && (
-          <Copy>2台を固定し、DLTポールまたはチェッカーボードで校正します。</Copy>
-        )}
-        {mode === "researcher" && <Copy>{selection.coordinateFrame}</Copy>}
-        {onSaveCapture && <Action onPress={onSaveCapture}>端末に保存</Action>}
-      </Panel>
-      <Panel title="撮影キュー">
-        {queue.length === 0 && <Copy>端末に保存された試技はありません。</Copy>}
-        {queue.map(({ capture_id, status, movement, coordinateFrame }) => (
-          <Notice key={capture_id}>
-            {`${movements[movement]} · ${captureModes[coordinateFrame]} · ${statuses[status]} (${status}) · ${capture_id}`}
-          </Notice>
-        ))}
-      </Panel>
+      <Title subtitle="競技に合わせて、見たい動作と撮影方法を選びます。">解析する動画を選ぶ</Title>
+      <GuideBanner badge="STEP 1">
+        競技を選び、動画をプレビューするか、サンプル試技で精度チェックへ進みましょう。
+      </GuideBanner>
+      <Grid layout="split">
+        <Grid>
+          <Panel title="競技・動作">
+            <Grid layout="choices">
+              {(Object.keys(movements) as CaptureMovement[]).map((movement) => (
+                <ChoiceCard
+                  key={movement}
+                  {...movements[movement]}
+                  selected={selection.movement === movement}
+                  onPress={() => onSelect({ ...selection, movement })}
+                />
+              ))}
+            </Grid>
+          </Panel>
+          <Panel title="動画プレビュー">
+            <VideoDropzone {...(onSample && { onSample })} />
+            <Copy>
+              取り込んだ動画は端末内でプレビューできます。解析画面では選んだ競技のデモ試技を使います。
+            </Copy>
+          </Panel>
+        </Grid>
+        <Grid>
+          <Panel title="撮影方法">
+            <Grid>
+              {(Object.keys(captureModes) as CaptureMode[]).map((coordinateFrame) => (
+                <ChoiceCard
+                  key={coordinateFrame}
+                  {...captureModes[coordinateFrame]}
+                  selected={selection.coordinateFrame === coordinateFrame}
+                  onPress={() => onSelect({ ...selection, coordinateFrame })}
+                />
+              ))}
+            </Grid>
+            {selection.coordinateFrame === "CalibratedWorld3D" && (
+              <Copy>2台を固定し、DLTポールまたはチェッカーボードで校正します。</Copy>
+            )}
+            {selection.coordinateFrame === "CalibratedWorld3D" && !live && (
+              <Copy>この競技のデモ試技は参考角度で表示します。</Copy>
+            )}
+            {mode === "researcher" && <Copy>{selection.coordinateFrame}</Copy>}
+          </Panel>
+          <Panel title="撮影キュー">
+            {queue.length === 0 && <Copy>端末に保存した試技がここに表示されます。</Copy>}
+            {queue.map(({ capture_id, status, movement, coordinateFrame }) => (
+              <Copy key={capture_id}>
+                {movements[movement].label} · {captureModes[coordinateFrame].label} ·{" "}
+                {statuses[status]}
+                {status === "QueuedOffline" || mode === "researcher"
+                  ? ` (${status}) · ${capture_id}`
+                  : ""}
+              </Copy>
+            ))}
+            {live && (
+              <Notice tone="success">
+                サンプル接続済み · Pythonで再構成した合成ランニング試技
+              </Notice>
+            )}
+          </Panel>
+        </Grid>
+      </Grid>
     </>
   );
 }

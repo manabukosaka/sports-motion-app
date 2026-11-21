@@ -3,10 +3,11 @@ import { createSecretKey, randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, open, readFile, realpath, rm, stat } from "node:fs/promises";
-import { createServer } from "node:http";
+import { createServer, request as requestHttp } from "node:http";
 import { tmpdir } from "node:os";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createInterface } from "node:readline";
+import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
@@ -15,12 +16,16 @@ const mobileDist = join(repository, "apps", "mobile", "dist");
 const host = "127.0.0.1";
 const teamId = "demo-team";
 const athleteId = "demo-runner";
-const trialId = "demo-run-current";
-const baselineTrialId = "demo-run-baseline";
+const trialId = "demo-run-current-v2";
+const baselineTrialId = "demo-run-baseline-v2";
 const userId = "demo-admin";
 const teamPath = `/teams/${teamId}`;
 const trialPath = `${teamPath}/trials/${trialId}`;
 const sessionDurationMs = 8 * 60 * 60 * 1000;
+const mobileApiWrites = new Set([
+  `/demo-api${teamPath}/share-links`,
+  `/demo-api${trialPath}/revisions`,
+]);
 
 const workspaceEntries = [
   "apps/api/dist/index.js",
@@ -101,7 +106,10 @@ function demoApiServer(options, sharePolicy, handleApiRequest) {
       void handleApiRequest(request, response, routeOptions);
       return;
     }
-    if (request.method === "GET" && request.url === trialPath) {
+    if (
+      request.method === "GET" &&
+      (request.url === trialPath || request.url === `${teamPath}/trials/demo-run-current`)
+    ) {
       const hasBody =
         Boolean(request.headers["transfer-encoding"]) ||
         (request.headers["content-length"] ?? "0") !== "0";
@@ -118,20 +126,58 @@ function demoApiServer(options, sharePolicy, handleApiRequest) {
       }
       request.url = `${teamPath}/trial-videos/${trialId}`;
     }
-    void handleApiRequest(request, response, options);
+    const policy =
+      request.method === "POST" && request.url.split("?", 1)[0] === `${teamPath}/share-links`
+        ? sharePolicy
+        : options;
+    void handleApiRequest(request, response, policy);
   }
   return createServer(handle).on("checkContinue", handle);
 }
 
+function runningJoints(frame, strideEnd, strideScale) {
+  const phase = ((frame - 8) / (strideEnd - 8)) * 2 * Math.PI;
+  const pelvis = [0, 0.86 + 0.02 * Math.cos(phase * 2), 0];
+  const offset = ([x, y, z], right, up, forward) => [x + right, y + up, z - forward];
+  const segment = (origin, length, angle) =>
+    offset(origin, 0, -length * Math.cos(angle), length * Math.sin(angle));
+  const joints = { pelvis, nose: offset(pelvis, 0, 0.72, 0.13) };
+  for (const [side, sign] of [
+    ["left", -1],
+    ["right", 1],
+  ]) {
+    const step = phase + (sign === 1 ? 0 : Math.PI);
+    const swing = Math.max(0, Math.sin(step - 2.05));
+    const hip = offset(pelvis, sign * 0.1, 0, 0);
+    const thigh = strideScale * (0.12 + 0.48 * Math.cos(step));
+    const flexion = 0.36 + 0.18 * Math.sin(2 * step) + strideScale * 1.08 * swing ** 2;
+    const knee = segment(hip, 0.41, thigh);
+    const ankle = segment(knee, 0.39, thigh - flexion);
+    const shoulder = offset(pelvis, sign * 0.19, 0.49, 0.08 + sign * 0.04 * Math.sin(phase));
+    const armAngle = -0.35 - 0.56 * Math.cos(step);
+    const elbow = segment(shoulder, 0.285, armAngle);
+    const wrist = segment(elbow, 0.255, armAngle + 1.35);
+    Object.assign(joints, {
+      [`${side}_hip`]: hip,
+      [`${side}_knee`]: knee,
+      [`${side}_ankle`]: ankle,
+      [`${side}_shoulder`]: shoulder,
+      [`${side}_elbow`]: elbow,
+      [`${side}_wrist`]: wrist,
+    });
+    if (sign === 1) {
+      joints.right_foot_index = offset(ankle, 0, -0.04, 0.13);
+      joints.right_knee_left_epicondyle = offset(knee, -0.04, 0, 0);
+      joints.right_knee_right_epicondyle = offset(knee, 0.04, 0, 0);
+      joints.right_ankle_left_malleolus = offset(ankle, -0.03, 0, 0);
+      joints.right_ankle_right_malleolus = offset(ankle, 0.03, 0, 0);
+    }
+  }
+  return Object.entries(joints);
+}
+
 function calibratedRun(calibration, id, strideEnd, strideScale) {
   const fps = 60;
-  const markersMeters = [
-    ["right_hip", 0, 1, 0, 0],
-    ["right_knee_left_epicondyle", -0.04, 0.6, 0, 0.05],
-    ["right_knee_right_epicondyle", 0.04, 0.6, 0, 0.05],
-    ["right_ankle_left_malleolus", -0.03, 0.2, 0.16, 0.15],
-    ["right_ankle_right_malleolus", 0.03, 0.2, 0.16, 0.15],
-  ];
   return {
     capture_id: `${id}-capture`,
     analysis_job_id: `${id}-job`,
@@ -148,32 +194,31 @@ function calibratedRun(calibration, id, strideEnd, strideScale) {
       detection_mode: "manual",
       side: "right",
     })),
-    views: calibration.views.map(({ view_id, dlt_params: p }) => ({
+    views: calibration.views.map(({ view_id, dlt_params: p }, camera) => ({
       contract_version: calibration.contract_version,
       trial_id: id,
       view_id,
       fps,
-      width_px: 1920,
-      height_px: 1080,
+      width_px: 480,
+      height_px: 320,
       lens_undistorted: true,
       coordinate_frame: "Image2D",
       unit: "px",
       frames: Array.from({ length: 80 }, (_, frame_index) => ({
         frame_index,
         timestamp_sec: frame_index / fps,
-        landmarks: markersMeters.map(
-          ([landmark_id, xMeters, yMeters, zMeters, amplitudeMeters]) => {
-            const phase = Math.sin(frame_index / 10);
-            const x = xMeters + 0.02 * phase;
-            const z = zMeters + strideScale * amplitudeMeters * phase;
-            const denominator = p[8] * x + p[9] * yMeters + p[10] * z + 1;
+        landmarks: runningJoints(frame_index, strideEnd, strideScale).map(
+          ([landmark_id, point]) => {
+            const [x, y, z] = point;
+            const denominator = p[8] * x + p[9] * y + p[10] * z + 1;
+            const missing = camera === 0 && frame_index === 24 && landmark_id === "right_knee";
             return {
               landmark_id,
-              x: (p[0] * x + p[1] * yMeters + p[2] * z + p[3]) / denominator,
-              y: (p[4] * x + p[5] * yMeters + p[6] * z + p[7]) / denominator,
-              confidence: 1,
+              x: missing ? null : (p[0] * x + p[1] * y + p[2] * z + p[3]) / denominator,
+              y: missing ? null : (p[4] * x + p[5] * y + p[6] * z + p[7]) / denominator,
+              confidence: missing ? null : 1,
               source: "tracker_raw",
-              missing_reason: null,
+              missing_reason: missing ? "occluded" : null,
             };
           },
         ),
@@ -221,22 +266,47 @@ async function seedDemo(apiBaseUrl, bearerToken, store, stopping) {
     ),
   );
   calibration.contract_version = "1.0.0";
+  calibration.views = calibration.views.map((view, index) => {
+    const yaw = index === 0 ? 0.06 : -0.74;
+    const cos = Math.cos(yaw);
+    const sin = Math.sin(yaw);
+    const centerX = index === 0 ? 238 : 207;
+    const centerY = 303;
+    const focal = 164;
+    const depthX = sin / 5;
+    const depthZ = cos / 5;
+    return {
+      ...view,
+      view_id: index === 0 ? "front_oblique" : "side_oblique",
+      intrinsics: { fx_px: focal, fy_px: focal, cx_px: centerX, cy_px: centerY },
+      dlt_params: [
+        -focal * cos + centerX * depthX,
+        0,
+        focal * sin + centerX * depthZ,
+        centerX,
+        centerY * depthX,
+        -focal,
+        centerY * depthZ,
+        centerY,
+        depthX,
+        0,
+        depthZ,
+      ],
+    };
+  });
   const baseline = await write(
     "POST",
     `${teamPath}/trials/${baselineTrialId}/analyze`,
     calibratedRun(calibration, baselineTrialId, 58, 0.8),
   );
-  const target = await write(
-    "POST",
-    `${trialPath}/analyze`,
-    calibratedRun(calibration, trialId, 62, 1),
-  );
+  const input = calibratedRun(calibration, trialId, 62, 1);
+  const target = await write("POST", `${trialPath}/analyze`, input);
   const share = await write("POST", `${trialPath}/share-links`, {
     analysisRevisionId: target.analysis_revision_id,
     evidenceSnapshotId: target.evidence_snapshot_id,
     expiresAt: Date.now() + sessionDurationMs,
   });
-  return { baseline, target, share };
+  return { baseline, target, share, input };
 }
 
 async function mobileAsset(root, request) {
@@ -274,17 +344,92 @@ async function mobileAsset(root, request) {
   }
 }
 
-async function startMobileServer(port) {
+function allowMobileRequest(request) {
+  const port = request.socket.localPort;
+  const hostHeader = request.headers.host;
+  return (
+    (hostHeader === `127.0.0.1:${port}` || hostHeader === `localhost:${port}`) &&
+    (!request.headers.origin || request.headers.origin === `http://${hostHeader}`) &&
+    (!request.headers["sec-fetch-site"] || request.headers["sec-fetch-site"] === "same-origin")
+  );
+}
+
+function proxyMobileApi(request, response, apiPort) {
+  const headers = {};
+  for (const key of ["authorization", "content-type", "content-length"]) {
+    if (request.headers[key] !== undefined) headers[key] = request.headers[key];
+  }
+  const upstream = requestHttp(
+    {
+      hostname: host,
+      port: apiPort,
+      method: request.method,
+      path: request.url.slice("/demo-api".length),
+      headers,
+    },
+    (reply) => {
+      response.writeHead(reply.statusCode, reply.headers);
+      void pipeline(reply, response).catch(() => upstream.destroy());
+    },
+  );
+  upstream.setTimeout(65_000, () => upstream.destroy());
+  upstream.on("error", () => {
+    if (response.destroyed) return;
+    if (response.headersSent) {
+      response.destroy();
+      return;
+    }
+    response
+      .writeHead(502, { "Content-Type": "application/json; charset=utf-8" })
+      .end('{"error":"demo_api_unavailable"}');
+  });
+  request.once("error", () => upstream.destroy());
+  response.once("close", () => {
+    if (!response.writableFinished) upstream.destroy();
+  });
+  request.pipe(upstream);
+}
+
+async function startMobileServer(port, apiPort, config) {
   const root = await realpath(mobileDist);
   return listen(
     createServer(async (request, response) => {
       try {
+        const pathname = request.url.split("?", 1)[0];
+        const isConfig = pathname === "/demo-config.json";
+        const isProxy = pathname.startsWith("/demo-api/");
+        response.setHeader("Cache-Control", "no-store");
+        response.setHeader("X-Content-Type-Options", "nosniff");
+        if ((isConfig || isProxy) && !allowMobileRequest(request)) {
+          response
+            .writeHead(403, { "Content-Type": "application/json; charset=utf-8" })
+            .end('{"error":"forbidden"}');
+          return;
+        }
+        if (isConfig && (request.method === "GET" || request.method === "HEAD")) {
+          response.writeHead(200, {
+            "Content-Type": "application/json; charset=utf-8",
+            "Referrer-Policy": "no-referrer",
+          });
+          response.end(request.method === "HEAD" ? undefined : JSON.stringify(config()));
+          return;
+        }
+        if (isProxy) {
+          const read = request.method === "GET" || request.method === "HEAD";
+          const write = request.method === "POST" && mobileApiWrites.has(request.url);
+          if (!read && !write) {
+            response
+              .writeHead(405, { "Content-Type": "application/json; charset=utf-8" })
+              .end('{"error":"method_not_allowed"}');
+            return;
+          }
+          proxyMobileApi(request, response, apiPort);
+          return;
+        }
         const asset =
           request.method === "GET" || request.method === "HEAD"
             ? await mobileAsset(root, request)
             : undefined;
-        response.setHeader("Cache-Control", "no-store");
-        response.setHeader("X-Content-Type-Options", "nosniff");
         if (asset) {
           response.writeHead(200, { "Content-Type": asset.type, "Content-Length": asset.size });
           response.end(asset.body);
@@ -432,12 +577,12 @@ async function main() {
     );
     servers.push(apiServer);
     const apiBaseUrl = baseUrl(apiServer);
-    const { baseline, target, share } = await seedDemo(
-      apiBaseUrl,
-      bearerToken,
-      store,
-      shutdown.signal,
-    );
+    const {
+      baseline,
+      target,
+      share,
+      input: targetInput,
+    } = await seedDemo(apiBaseUrl, bearerToken, store, shutdown.signal);
     if (shutdown.signal.aborted) return;
     const comparison = compareTwoTrials({
       baseline: baseline.kinematic_metrics,
@@ -480,7 +625,46 @@ async function main() {
     });
     servers.push(shareServer);
     if (shutdown.signal.aborted) return;
-    const mobileServer = await startMobileServer(mobilePort);
+    const mobileServer = await startMobileServer(mobilePort, apiServer.address().port, () => {
+      const state = store.read();
+      const revisions = (state.motionJobs ?? [])
+        .filter((job) => job.teamId === teamId && job.trialId === trialId && job.coordinateCommit)
+        .map((job) => job.coordinateCommit.revision);
+      const head = revisions.at(-1)?.revision_id;
+      const latest =
+        head &&
+        state.analyses.find(
+          (analysis) =>
+            analysis.teamId === teamId &&
+            analysis.trialId === trialId &&
+            analysis.pose3d?.provenance.coordinate_revision_id === head,
+        );
+      const evidence =
+        latest &&
+        state.evidence.find(
+          (item) => item.teamId === teamId && item.analysisRevisionId === latest.id,
+        );
+      return {
+        apiBaseUrl: "/demo-api",
+        teamId,
+        bearerToken,
+        athleteId,
+        baselineTrialId,
+        shareWebBaseUrl: baseUrl(shareServer),
+        rawPose2d: targetInput.views[0],
+        rawRevisionId: targetInput.raw_revision_id,
+        revisions,
+        calibration: targetInput.calibration,
+        pose3d: latest?.pose3d ?? target.pose3d,
+        kinematic_metrics: latest?.summary ?? target.kinematic_metrics,
+        baseline_metrics: baseline.kinematic_metrics,
+        analysis_revision_id: latest?.id ?? target.analysis_revision_id,
+        evidence_snapshot_id: evidence?.id ?? target.evidence_snapshot_id,
+        evidence_registry_version: evidence?.registryVersion ?? target.evidence_registry_version,
+        disclaimer_text_ja: evidence?.disclaimerTextJa ?? target.disclaimer_text_ja,
+        cutoffsHz: latest?.selectedCutoffsHz ?? target.selected_cutoffs_hz,
+      };
+    });
     servers.push(mobileServer);
     if (shutdown.signal.aborted) return;
 

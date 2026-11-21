@@ -1,4 +1,4 @@
-import type { EvidenceCatalog } from "@sports-motion/contracts";
+import { type EvidenceCatalog, validateContract } from "@sports-motion/contracts";
 import { loadEvidenceCatalog } from "@sports-motion/evidence";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, test, vi } from "vitest";
@@ -59,10 +59,15 @@ function evidenceFixture() {
   return loadEvidenceCatalog(catalog);
 }
 
-test("shows three movements, camera choices, and the persisted capture state in the default Coach tab", () => {
+test("opens the guided capture workflow and keeps the persisted capture queue visible", () => {
   const html = renderToStaticMarkup(<SportsMotionApp {...createDemo()} capture={capture} />);
   expect(html).toContain('aria-pressed="true"');
-  expect(html).toMatch(/aria-pressed="true"[^>]*>コーチ<\/button>/u);
+  expect(html).toMatch(/aria-pressed="false"[^>]*>詳細解析 OFF<\/button>/u);
+  expect(html).toMatch(/aria-current="step"[^>]*>.*動画を選ぶ/u);
+  expect(html).toContain("解析を開始して精度チェックへ");
+  expect(html).toContain('type="file" accept="video/*"');
+  expect(html).toMatch(/<button(?![^>]*disabled)[^>]*>サンプル試技ですぐ体験<\/button>/u);
+  expect(html).not.toMatch(/>コーチ<\/button>|>研究者<\/button>/u);
   for (const label of [
     "野球投球",
     "ランニング",
@@ -115,7 +120,9 @@ test("progressively discloses source statistics, provenance, and gated research 
   );
   expect(coachComparison).toContain("研究参加者");
   expect(coachComparison).toContain("フォームの確認ポイント");
-  expect(coachTeam).toContain("初回との差 3.00 deg");
+  expect(coachTeam).toContain("初回との差");
+  expect(coachTeam).toContain("+3.00");
+  expect(coachTeam).toContain('data-trend="true"');
   for (const label of [
     "DOI",
     "pipeline_version",
@@ -132,7 +139,7 @@ test("progressively discloses source statistics, provenance, and gated research 
     expect(coachComparison + coachTeam).not.toContain(label);
     expect(researchComparison + researchTeam).toContain(label);
   }
-  expect(researchComparison).toMatch(/aria-pressed="true"[^>]*>研究者<\/button>/u);
+  expect(researchComparison).toMatch(/aria-pressed="true"[^>]*>詳細解析 ON<\/button>/u);
   expect(researchComparison).toContain("DOI 10.0000/mobile-ui-fixture · n = 20");
   expect(researchComparison).toContain("z = 0.5");
   expect(researchComparison).toContain("IQR = 16〜24 deg");
@@ -147,8 +154,9 @@ test.each([
 ] as const)("keeps the non-diagnostic text visible in %s mode", (initialMode) => {
   const demo = createDemo();
   for (const [initialScreen, count] of [
+    ["capture", 1],
     ["editing", 1],
-    ["comparison", 2],
+    ["comparison", 1],
     ["team", 1],
     ["share", 1],
   ] as const) {
@@ -171,26 +179,74 @@ test("comparison reflects synchronized controller seeking and playback speed", (
   comparison.session.setPlaybackRate(0.25);
   const html = renderToStaticMarkup(<ComparisonScreen {...comparison} mode="coach" />);
   expect(html).toContain("50.0% · 基準フレーム 24 · 今回フレーム 24");
+  expect(html).toContain('data-skeleton="3d" data-frame="24"');
+  expect(html).toContain('data-playhead="50"');
+  expect(html).toContain('data-reference-band="true"');
   expect(html).toMatch(/aria-pressed="true"[^>]*>0\.25x<\/button>/u);
 });
 
 test("editing displays anomaly flags and the computed finger-free loupe after a controller transition", () => {
   const { editing } = createDemo();
   const html = renderToStaticMarkup(<EditingStudioScreen {...editing} />);
-  const { viewport, fingertipRadius } = computeLoupeViewport(156, 178, 360, 240);
-  expect(html).toContain("低信頼度・欠測");
+  const { controller } = editing;
+  const raw = controller.effectivePose2d;
+  const missingFrame = raw.frames.find(({ landmarks }) =>
+    landmarks.some(
+      ({ landmark_id, missing_reason }) =>
+        landmark_id === "right_knee" && missing_reason === "occluded",
+    ),
+  );
+  if (!missingFrame) throw new Error("Missing test frame");
+  const previous = raw.frames[missingFrame.frame_index - 1]?.landmarks.find(
+    (point) => point.landmark_id === "right_knee",
+  );
+  const next = raw.frames[missingFrame.frame_index + 1]?.landmarks.find(
+    (point) => point.landmark_id === "right_knee",
+  );
+  if (previous?.missing_reason !== null || next?.missing_reason !== null)
+    throw new Error("Missing test landmarks");
+  const focusX = (previous.x + next.x) / 2;
+  const focusY = (previous.y + next.y) / 2;
+  const { viewport, fingertipRadius } = computeLoupeViewport(
+    focusX,
+    focusY,
+    raw.width_px,
+    raw.height_px,
+  );
+  expect(html).toContain('data-joint="right_knee" data-anomaly="true"');
   expect(html).toContain(`data-loupe-x="${viewport.x}"`);
   expect(html).toContain(`data-loupe-y="${viewport.y}"`);
-  expect(178 - viewport.y - viewport.height).toBeGreaterThanOrEqual(fingertipRadius);
-  const { controller } = editing;
-  const missingFrame = controller.effectivePose2d.frames[1];
-  if (!missingFrame) throw new Error("Missing test frame");
+  expect(focusY - viewport.y - viewport.height).toBeGreaterThanOrEqual(fingertipRadius);
   controller.interpolateRange("ui-fill", {
     landmarkId: "right_knee",
     startFrame: missingFrame.frame_index,
     endFrame: missingFrame.frame_index,
   });
-  expect(renderToStaticMarkup(<EditingStudioScreen {...editing} />)).not.toContain("欠測");
+  expect(renderToStaticMarkup(<EditingStudioScreen {...editing} />)).not.toContain(
+    'data-anomaly="true"',
+  );
+  expect(controller.rawPose2d.frames[missingFrame.frame_index]).toEqual(missingFrame);
+});
+
+test.each([
+  "running",
+  "baseball_pitching",
+  "jump_landing",
+] as const)("builds a complete, movement-specific sample for %s", (movement) => {
+  const demo = createDemo(movement);
+  const raw = demo.editing.controller.rawPose2d;
+  expect(validateContract("pose2d", raw)).toBe(true);
+  expect(validateContract("pose3d", demo.editing.pose3d)).toBe(true);
+  expect(raw.frames).toHaveLength(49);
+  expect(demo.comparison.pose3d?.frames).toHaveLength(49);
+  expect(raw.frames.every(({ landmarks }) => landmarks.length === 15)).toBe(true);
+  expect(
+    raw.frames.flatMap(({ landmarks }) =>
+      landmarks.filter((point) => point.missing_reason !== null),
+    ),
+  ).toHaveLength(1);
+  expect(demo.comparison.target.normalized_waveforms[0]?.points).toHaveLength(49);
+  expect(demo.team.query.trials).toHaveLength(4);
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -210,6 +266,12 @@ test("share requires consent before issuing and pins analysis, evidence, and exp
   const denied = { ...share, connection };
   const html = renderToStaticMarkup(<ShareScreen {...denied} />);
   expect(html).toContain("選手の共有同意が必要です。");
+  expect(html).toMatch(/role="switch" aria-checked="false"/u);
+  expect(html).toContain("LINE共有プレビュー");
+  expect(html).not.toContain("analysis_revision_id");
+  expect(renderToStaticMarkup(<ShareScreen {...denied} mode="researcher" />)).toContain(
+    share.analysis.analysis_revision_id,
+  );
   expect(html).toMatch(/<button[^>]* disabled=""[^>]*>共有リンクを発行<\/button>/u);
   await expect(issueSharePreview(denied, "7日間")).rejects.toThrow("consent");
   expect(post).not.toHaveBeenCalled();
