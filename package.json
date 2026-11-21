@@ -13,6 +13,7 @@
     "check:boundaries:self-test": "node scripts/check-ts-boundaries.mjs --self-test",
     "test:contracts": "pnpm --filter @sports-motion/contracts run test:contracts",
     "test:g3": "pnpm --filter @sports-motion/contracts run test:g3",
+    "test:vertical-slice": "pnpm --filter @sports-motion/contracts run build && pnpm --filter @sports-motion/api run test:vertical-slice",
     "verify:lifecycle": "pnpm --filter @sports-motion/contracts run build && pnpm --filter @sports-motion/api run verify:lifecycle",
     "verify:access-policy": "pnpm --filter @sports-motion/contracts run build && pnpm --filter @sports-motion/share-web run build && pnpm --filter @sports-motion/api run verify:access-policy",
     "test": "pnpm --filter @sports-motion/contracts run build && pnpm -r run test"

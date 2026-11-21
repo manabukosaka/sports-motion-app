@@ -23,6 +23,7 @@ export const schemaRefs = {
   calibration: calibration.$id,
   pose3d: pose3d.$id,
   kinematic_metrics: `${kinematicAndShare.$id}#/$defs/KinematicMetrics`,
+  capture_event: `${kinematicAndShare.$id}#/$defs/event`,
   share_report: `${kinematicAndShare.$id}#/$defs/ShareReportSnapshot`,
   evidence_catalog: evidenceId,
 };

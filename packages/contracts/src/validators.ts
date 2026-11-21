@@ -18,6 +18,7 @@ export interface ContractTypes {
   calibration: CalibrationParams;
   pose3d: Pose3DSequence;
   kinematic_metrics: KinematicMetrics;
+  capture_event: KinematicMetrics["events"][number];
   share_report: ShareReportSnapshot;
   evidence_catalog: EvidenceCatalog;
 }
@@ -65,6 +66,7 @@ const validators = {
     (value.mode === "monocular_reference" || value.views[0].view_id !== value.views[1].view_id),
   pose3d: (value: unknown) => pose3dSchema(value) && increasingFrames(value.frames),
   kinematic_metrics: compile("kinematic_metrics"),
+  capture_event: compile("capture_event"),
   share_report: (value: unknown) => {
     if (
       !shareReportSchema(value) ||

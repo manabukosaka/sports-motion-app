@@ -28,6 +28,7 @@ from .reconstruction import reconstruct
 from .revisions import apply_revisions, effective_revisions
 
 CONTRACT_VERSION = "0.1.0"
+SUPPORTED_CONTRACT_VERSIONS = (CONTRACT_VERSION, "1.0.0")
 PIPELINE_VERSION = "0.1.0"
 FILTER_SPEC_VERSION = "0.1.0"
 STAGES: tuple[Stage, ...] = (
@@ -121,14 +122,14 @@ def _stage_manifests(
         else:
             if custom[stage]:
                 raise ValueError(f"{stage} requires a plugin manifest")
-            if contract_version != CONTRACT_VERSION:
+            if contract_version not in SUPPORTED_CONTRACT_VERSIONS:
                 raise ValueError(
                     f"{stage} does not support contract version {contract_version}"
                 )
             manifest = PluginManifest(
                 stage=stage,
                 plugin_version=PIPELINE_VERSION,
-                contract_compatibility=[CONTRACT_VERSION],
+                contract_compatibility=list(SUPPORTED_CONTRACT_VERSIONS),
                 model_hash="none",
                 license_tier="A",
                 license_attestation=LicenseAttestation(
@@ -222,7 +223,7 @@ def run_calibrated_pipeline(
         or metrics.analysis_revision_id != analysis_revision_id
         or metrics.movement_type != movement
     ):
-        raise ValueError(
+        raise RuntimeError(
             "pipeline output does not match the calibrated analysis context"
         )
     return PipelineResult(

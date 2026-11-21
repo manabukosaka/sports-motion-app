@@ -66,6 +66,7 @@
   - `pnpm run check:boundaries:self-test`
   - `pnpm run test:contracts`
   - `pnpm run test:g3`
+  - `pnpm run test:vertical-slice`
   - `pnpm run verify:lifecycle`
   - `pnpm exec playwright install --only-shell chromium`（共有ビュー検証の初回のみ）
   - `pnpm run verify:access-policy`

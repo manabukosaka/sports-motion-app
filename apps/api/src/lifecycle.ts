@@ -1,29 +1,13 @@
-import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { type CoordinateRevision, validateContract } from "@sports-motion/contracts";
+import { canonicalJson, jsonDigest } from "./canonical-json.js";
 import { MemoryStateStore, type StateStore } from "./state-store.js";
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 type CoordinateEdit = CoordinateRevision["edits"][number];
 
-function canonicalJson(value: Json): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(",")}]`;
-  }
-  if (value !== null && typeof value === "object") {
-    return `{${Object.entries(value)
-      .sort(([left], [right]) => (left < right ? -1 : Number(left !== right)))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`)
-      .join(",")}}`;
-  }
-  if (typeof value === "number" && !Number.isFinite(value)) {
-    throw new TypeError("JSON numbers must be finite");
-  }
-  return JSON.stringify(value);
-}
-
 function id(prefix: string, identity: Json): string {
-  return `${prefix}-${createHash("sha256").update(canonicalJson(identity)).digest("hex")}`;
+  return `${prefix}-${jsonDigest(identity)}`;
 }
 
 function trialId(teamId: string, captureId: string) {
