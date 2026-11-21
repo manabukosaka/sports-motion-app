@@ -116,12 +116,14 @@ function shareView(
 ) {
   const [, id, resource, resourceId] = segments;
   const token = query.get("token");
+  const pose = segments[0] === "share" && segments.length === 3 && resource === "pose3d";
   if (
     method !== "GET" ||
     !id ||
     !token ||
     !(
       segments.length === 2 ||
+      pose ||
       (segments.length === 4 &&
         (resource === "analysis-revisions" || resource === "evidence-snapshots"))
     ) ||
@@ -146,11 +148,16 @@ function shareView(
   }
   const analysisRevisionId = resource === "analysis-revisions" ? resourceId : queryAnalysis;
   const evidenceSnapshotId = resource === "evidence-snapshots" ? resourceId : queryEvidence;
-  return policy.readShare(id, token, {
-    ...(teamId !== undefined && { teamId }),
-    ...(analysisRevisionId !== undefined && { analysisRevisionId }),
-    ...(evidenceSnapshotId !== undefined && { evidenceSnapshotId }),
-  });
+  return policy.readShare(
+    id,
+    token,
+    {
+      ...(teamId !== undefined && { teamId }),
+      ...(analysisRevisionId !== undefined && { analysisRevisionId }),
+      ...(evidenceSnapshotId !== undefined && { evidenceSnapshotId }),
+    },
+    pose ? "pose3d" : "report",
+  );
 }
 
 export async function handleApiRequest(
@@ -171,12 +178,12 @@ export async function handleApiRequest(
     }
 
     const [route, teamId, collection, id, action] = segments;
-    const resource = collection ? resources.get(collection) : undefined;
     const analyze =
       request.method === "POST" &&
-      resource === "TrialVideo" &&
+      (collection === "trial-videos" || collection === "trials") &&
       segments.length === 5 &&
       action === "analyze";
+    const resource = analyze ? "TrialVideo" : collection && resources.get(collection);
     if (
       route !== "teams" ||
       !teamId ||
