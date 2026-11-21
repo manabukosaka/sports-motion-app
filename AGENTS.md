@@ -15,19 +15,24 @@
 コード変更・設計変更を行うすべてのタスクは、以下のループに従う。検証に失敗した場合は自動で修正へ戻る。
 
 ```text
-0. Track     : 対応する GitHub Issue を確認し、大きければ GitHub Sub-issues で Verifiable Units へ分解。対象 Issue/Sub-issue の Project ステータスを In Progress に更新し、`scripts/worktree.ps1 start` で専用 Worktree & ブランチを作成する。
+0. Track     : 対応する GitHub Issue を確認し、大きければ GitHub Sub-issues で Verifiable Units へ分解。対象 Issue/Sub-issue の Project ステータスを In Progress に更新し、`scripts/worktree.ps1 start` で専用 Worktree & ブランチを作成する（Orca IDE では実装 `codex` と独立レビュー/検証 `antigravity` の2セッションを必須とする）。
 1. Plan      : 問題を自分の言葉で整理し、対象プレイブックを選択。境界・型・検証方法を先に決める。
-2. Implement : Laziness Protocol に従い、対象 Worktree 上で最小限かつ検証可能な単位を実装する（主実行役: `codex exec -m gpt-6.2-sol`）。
-3. Review    : 自己または別視点エージェントで批判的レビュー（物理破綻・境界違反・Slop除去）。
-4. Verify    : 静的チェックだけでなく、実実行・テスト・Evalで動作と数値を証明し、PR作成（`Closes #<num>` + 証跡テーブル）・マージ後に `scripts/worktree.ps1 finish` で Worktree を整理、Project ステータスを更新する。
+2. Implement : Laziness Protocol に従い、対象 Worktree の `codex` セッションで最小限かつ検証可能な単位を実装する（主実行役: `codex exec -m gpt-6.2-sol`）。
+3. Review    : 同一 Worktree に紐付けた独立 `antigravity` セッションで批判的レビュー（物理破綻・境界違反・セキュリティ・Slop除去）を行う。
+4. Verify    : `antigravity` セッションで静的チェックだけでなく実実行・テスト・Evalによる動作と数値を証明し、PR作成（`Closes #<num>` + 証跡テーブル）・マージ後に `scripts/worktree.ps1 finish` で Worktree を整理、Project ステータスを更新する。
 ```
 
 ## エージェント役割分担（マルチエージェント運用）
-- **Orchestrator / Architect / Reviewer**: 設計・仕様策定・GitHub Projects/Issues/Sub-issues管理・タスク分割・Worktree割り当て・批判的レビュー・最終品質ゲート判定を担う。
-- **Implementation Worker（手を動かす実行役）**: ローカルの **Codex CLI（`codex exec -m gpt-6.2-sol`）** を実装・プロトタイプ作成・テスト実装・リファクタリングの主実行役として活用する。
-  - Orca に登録済みのリポジトリでは、`./scripts/worktree.ps1 start -Issue <num> -Type feat -Slug <slug> -Agent codex -Model gpt-6.2-sol -Prompt "<明確なIntent・境界・検証コマンド>"` で Issue 付きの Worktree と実装セッションを作成する。既存の Orca Worktree でセッションを開始するには `./scripts/worktree.ps1 launch -Issue <num> -Model gpt-6.2-sol` を使う。
-  - Git で Worktree を作成するには `./scripts/worktree.ps1 start -Issue <num> -Type feat -Slug <slug> -NoOrca` を使う。非対話の Codex CLI では、`"<明確なIntent・境界・検証コマンド>" | codex exec -m gpt-6.2-sol -s workspace-write -C "<worktree-path>" -` のようにパイプ経由で stdin を閉じる。
-  - 実装完了後は必ず **Orchestrator 側で** 独立レビューおよび実測検証（Prove It Works）を行う（実装ワーカー内部からネストして `codex review` を起動しない）。
+- **Orca Worktree 2セッション原則（必須）**: Orca IDE に登録済みのすべての Issue Worktree では、必ず以下の2つの紐付けセッションを稼働させる。
+  1. **Implementation Worker（`codex`）**: 実装・プロトタイプ作成・テスト実装・リファクタリングを担う。
+     - `./scripts/worktree.ps1 launch -Issue <num> -Agent codex -Model gpt-6.2-sol -Effort high -Activate -Prompt "<明確なIntent・境界・検証コマンド>"`
+  2. **Gemini / Antigravity Reviewer & Verifier（`antigravity`）**: 独立批判的レビュー・実行時検証（Prove It Works）・品質ゲート判定を担う。
+     - `./scripts/worktree.ps1 launch -Issue <num> -Agent antigravity -Activate -Prompt "<レビュー対象・検証コマンド・完了条件>"`
+- **Orchestrator / Architect**: 設計・仕様策定・GitHub Projects/Issues/Sub-issues管理・タスク分割・Worktree割り当て・最終マージ判断を担う。
+- **Worktree 作成 / 非Orca フォールバック**:
+  - Worktree 新規作成: `./scripts/worktree.ps1 start -Issue <num> -Type feat -Slug <slug> -Agent codex -Model gpt-6.2-sol -Prompt "<明確なIntent・境界・検証コマンド>"`
+  - 非Orca 環境では `./scripts/worktree.ps1 start -Issue <num> -Type feat -Slug <slug> -NoOrca` で Worktree を作成し、非対話の Codex CLI は `"<明確なIntent・境界・検証コマンド>" | codex exec -m gpt-6.2-sol -s workspace-write -C "<worktree-path>" -` のようにパイプ経由で stdin を閉じる。
+  - 実装完了後は必ず別セッション（`antigravity` / Orchestrator 側）で独立レビューおよび実測検証を行う（実装ワーカー内部からネストして `codex review` を起動しない）。
 
 ## プロジェクトマネジメント（GitHub Projects / Issues / Sub-issues / Worktree）
 - タスク管理の Single Source of Truth は GitHub リポジトリ `manabukosaka/sports-motion-app` の **Milestones / Issues / Sub-issues / GitHub Project（`Sports Motion App Roadmap`）** とする。
@@ -61,4 +66,7 @@
   - `pnpm run check:boundaries:self-test`
   - `pnpm run test:contracts`
   - `pnpm run test:g3`
+  - `pnpm run verify:lifecycle`
+  - `pnpm exec playwright install --only-shell chromium`（共有ビュー検証の初回のみ）
+  - `pnpm run verify:access-policy`
   - `pnpm run test`

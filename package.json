@@ -13,11 +13,14 @@
     "check:boundaries:self-test": "node scripts/check-ts-boundaries.mjs --self-test",
     "test:contracts": "pnpm --filter @sports-motion/contracts run test:contracts",
     "test:g3": "pnpm --filter @sports-motion/contracts run test:g3",
+    "verify:lifecycle": "pnpm --filter @sports-motion/contracts run build && pnpm --filter @sports-motion/api run verify:lifecycle",
+    "verify:access-policy": "pnpm --filter @sports-motion/contracts run build && pnpm --filter @sports-motion/share-web run build && pnpm --filter @sports-motion/api run verify:access-policy",
     "test": "pnpm --filter @sports-motion/contracts run build && pnpm -r run test"
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.11",
     "@types/node": "22.19.0",
+    "playwright": "1.65.1",
     "typescript": "5.9.3",
     "vitest": "3.2.6"
   }
