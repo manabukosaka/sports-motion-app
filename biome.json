@@ -1,0 +1,14 @@
+{
+  "files": {
+    "includes": ["packages/**", "apps/**", "scripts/*.mjs", "!**/dist", "!**/fixtures", "!**/schemas"]
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "lineWidth": 100
+  },
+  "linter": {
+    "rules": {
+      "recommended": true
+    }
+  }
+}

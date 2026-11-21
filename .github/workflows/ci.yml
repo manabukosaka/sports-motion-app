@@ -14,6 +14,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run test:contracts
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: '3.14'
@@ -24,6 +31,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run test:g3
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: '3.14'
@@ -32,6 +46,22 @@ jobs:
       - run: uv run --project services/motion-engine --frozen mypy services/motion-engine/src
       - run: uv run --project services/motion-engine --frozen ruff check services/motion-engine/src evals/biomechanics scripts/test-license-gate.py
       - run: uv run --project services/motion-engine --frozen pytest evals/biomechanics/tests
+
+  ts-quality-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm run lint
+      - run: pnpm run check:boundaries
+      - run: pnpm run check:boundaries:self-test
+      - run: pnpm run test
 
   biomech-eval:
     runs-on: ubuntu-latest
