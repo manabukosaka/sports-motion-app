@@ -142,6 +142,15 @@ export interface GuardianLink {
   active: boolean;
 }
 
+export interface DeletionAuditReceipt {
+  receiptId: string;
+  teamId: string;
+  deletedAt: number;
+  removedTrials: number;
+  removedAnalyses: number;
+  revokedShareLinks: number;
+}
+
 export interface AccessState {
   memberships: Membership[];
   guardians: GuardianLink[];
@@ -152,6 +161,7 @@ export interface AccessState {
   evidence: EvidenceRecord[];
   links: Link[];
   motionJobs?: MotionJob[];
+  deletionAudits?: DeletionAuditReceipt[];
 }
 
 interface MotionJob {
@@ -574,6 +584,105 @@ export class AccessPolicy {
 
   canAnalyzeTrial(userId: string | undefined, teamId: string, trialId: string) {
     return writableTrial(this.store.read(), userId, teamId, trialId) !== undefined;
+  }
+
+  canAccessTrialVideo(
+    userId: string | undefined,
+    teamId: string,
+    trialId: string,
+    operation: "R" | "W",
+  ) {
+    return operation === "R"
+      ? this.readableRow(userId, teamId, "TrialVideo", trialId) !== undefined
+      : this.canAnalyzeTrial(userId, teamId, trialId);
+  }
+
+  deleteAthletePersonalData(userId: string | undefined, teamId: string, athleteId: string) {
+    return this.store.update((state) => {
+      const member = memberFor(state, userId, teamId, "AthleteProfile", "R");
+      if (
+        !(
+          member?.role === "OrgAdmin" ||
+          (member?.role === "Athlete" && member.athleteId === athleteId)
+        ) ||
+        !inTeam(state.teams, teamId, teamId) ||
+        !inTeam(state.athletes, athleteId, teamId)
+      ) {
+        return;
+      }
+
+      const belongsToAthlete = (row: { teamId: string; athleteId?: string }) =>
+        row.teamId === teamId && row.athleteId === athleteId;
+      const trialIds = new Set(state.trials.filter(belongsToAthlete).map(({ id }) => id));
+      const belongsToTrial = (row: { teamId: string; trialId: string }) =>
+        row.teamId === teamId && trialIds.has(row.trialId);
+      const analysisIds = new Set(
+        state.analyses
+          .filter((row) => belongsToAthlete(row) || belongsToTrial(row))
+          .map(({ id }) => id),
+      );
+      const evidenceIds = new Set(
+        state.evidence
+          .filter(
+            (row) =>
+              row.teamId === teamId &&
+              (belongsToAthlete(row) ||
+                belongsToTrial(row) ||
+                analysisIds.has(row.analysisRevisionId)),
+          )
+          .map(({ id }) => id),
+      );
+
+      state.athletes = state.athletes.filter(
+        (row) => row.teamId !== teamId || row.id !== athleteId,
+      );
+      state.memberships = state.memberships.filter(
+        (row) => row.role !== "Athlete" || !belongsToAthlete(row),
+      );
+      for (const membership of state.memberships.filter(belongsToAthlete)) {
+        delete membership.athleteId;
+      }
+      state.guardians = state.guardians.filter((row) => !belongsToAthlete(row));
+      state.trials = state.trials.filter((row) => row.teamId !== teamId || !trialIds.has(row.id));
+      state.analyses = state.analyses.filter(
+        (row) => row.teamId !== teamId || !analysisIds.has(row.id),
+      );
+      state.evidence = state.evidence.filter(
+        (row) => row.teamId !== teamId || !evidenceIds.has(row.id),
+      );
+      if (state.motionJobs) {
+        state.motionJobs = state.motionJobs.filter((row) => !belongsToTrial(row));
+      }
+
+      let revokedShareLinks = 0;
+      for (const link of state.links) {
+        if (
+          link.teamId === teamId &&
+          (analysisIds.has(link.claims.analysisRevisionId) ||
+            evidenceIds.has(link.claims.evidenceSnapshotId))
+        ) {
+          if (!link.revoked) {
+            revokedShareLinks += 1;
+          }
+          link.revoked = true;
+          link.claims.analysisRevisionId = "";
+          link.claims.evidenceSnapshotId = "";
+          link.snapshotJson = "";
+          delete link.pose3dJson;
+        }
+      }
+      const receipt: DeletionAuditReceipt = {
+        receiptId: randomUUID(),
+        teamId,
+        deletedAt: this.now(),
+        removedTrials: trialIds.size,
+        removedAnalyses: analysisIds.size,
+        revokedShareLinks,
+      };
+      state.deletionAudits ??= [];
+      state.deletionAudits.push(receipt);
+      return receipt;
+    });
   }
 
   async analyzeTrial(
