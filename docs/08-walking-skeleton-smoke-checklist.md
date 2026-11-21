@@ -2,6 +2,20 @@
 
 対象は iOS と Android の Expo Dev Build。共有に同意したテスト選手、アップロードと共有リンク発行が可能なコーチ、端末から HTTPS で到達できる API と Share Web を用意する。受信側にも LINE を用意する。両 OS で各手順を行い、通過後にチェックする。端末が 240 fps 撮影に対応しない場合は理由を記録し、対応端末で 240 fps を検証する。
 
+### Expo Dev Build の起動
+
+リポジトリルートで `pnpm install --frozen-lockfile` と `pnpm --filter '@sports-motion/mobile...' run build` を実行する。Android SDK をセットアップした環境では `pnpm --filter @sports-motion/mobile exec expo run:android --device`、Xcode をセットアップした macOS では `pnpm --filter @sports-motion/mobile exec expo run:ios --device` で開発ビルドをインストールする。再起動時は `pnpm --filter @sports-motion/mobile run start --dev-client` を実行する。ブラウザでシェルを確認する場合は `pnpm --filter @sports-motion/mobile run start --web` を使う。
+
+起動時はランニングのデモ試技を表示する。実データの検証では、`SportsMotionApp` に撮影キュー、対象試技の編集・比較コントローラー、選手の共有同意および認証済みの `WalkingSkeletonMobileClient` を設定する。対象の解析版とエビデンス版を控えてから次の順に進む。
+
+| 画面 | 操作 |
+| --- | --- |
+| 撮影（`CaptureScreen`） | 3動作と1／2カメラを選択し、端末再起動後に保存済み `capture_id` とキュー状態を確認する。 |
+| 座標修正（`EditingStudioScreen`） | 異常フレームを選択し、ルーペ、左右修正、補間、Undo／Redo、保存後の再計算表示を確認する。 |
+| 比較（`ComparisonScreen`） | 同期スクラブと再生速度を確認する。コーチから研究者に切り替え、出典と解析条件が表示され、注意文が両方に残ることを確認する。 |
+| チーム（`TeamDashboardScreen`） | 選手の試技と推移を確認する。研究者モードで CSV／MOT を出力し、未校正試技の TRC が無効になることを確認する。 |
+| 共有（`ShareScreen`） | 同意なしで発行できないことを確認する。同意済み選手で期限を選び、固定された解析版・エビデンス版、サマリーカード、LINE 共有を確認する。 |
+
 | 確認項目 | iOS | Android |
 | --- | --- | --- |
 | 同じ短い試技を校正済みの 2 視点で撮影または選択する。240 fps と 60 fps の入力で、保存後のフレームレート、フレーム数、両視点の同期を記録する。 | [ ] | [ ] |

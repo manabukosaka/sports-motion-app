@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Sports Motion",
+    "slug": "sports-motion",
+    "scheme": "sportsmotion",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "ios": {
+      "bundleIdentifier": "app.sportsmotion.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "動作を解析するために試技を撮影します。",
+        "NSPhotoLibraryUsageDescription": "解析する試技の動画を選択します。",
+        "NSMicrophoneUsageDescription": "試技の同期やコーチの音声コメントを録音します。"
+      }
+    },
+    "android": {
+      "package": "app.sportsmotion.mobile",
+      "permissions": ["CAMERA", "READ_MEDIA_VIDEO", "RECORD_AUDIO"]
+    },
+    "web": { "bundler": "metro" }
+  }
+}
