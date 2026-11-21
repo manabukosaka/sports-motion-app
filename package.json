@@ -16,11 +16,13 @@
     "test:evidence": "pnpm --filter @sports-motion/contracts run build && pnpm --filter @sports-motion/evidence run test",
     "test:export": "pnpm --filter @sports-motion/contracts run build && pnpm --filter @sports-motion/export run test",
     "test:editing": "pnpm --filter @sports-motion/contracts run build && pnpm --filter @sports-motion/editing run test",
+    "test:coaching": "pnpm --filter @sports-motion/coaching... run build && pnpm --filter @sports-motion/coaching run test",
     "test:vertical-slice": "pnpm --filter @sports-motion/api... run build && pnpm --filter @sports-motion/api run test:vertical-slice",
     "test:walking-skeleton-e2e": "pnpm -r run build && node scripts/test-walking-skeleton-e2e.mjs",
     "verify:lifecycle": "pnpm --filter @sports-motion/api... run build && pnpm --filter @sports-motion/api run verify:lifecycle",
-    "verify:access-policy": "pnpm --filter @sports-motion/api... --filter @sports-motion/share-web run build && pnpm --filter @sports-motion/api run verify:access-policy",
-    "test": "pnpm --filter @sports-motion/api... --filter @sports-motion/export... run build && pnpm -r run test"
+    "verify:access-policy": "pnpm --filter @sports-motion/api... --filter @sports-motion/share-web... run build && pnpm --filter @sports-motion/api run verify:access-policy",
+    "verify:comparison-view": "pnpm --filter @sports-motion/coaching... --filter @sports-motion/share-web... run build && node scripts/verify-comparison-view.mjs",
+    "test": "pnpm --filter @sports-motion/api... --filter @sports-motion/export... --filter @sports-motion/coaching... run build && pnpm -r run test"
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.11",
