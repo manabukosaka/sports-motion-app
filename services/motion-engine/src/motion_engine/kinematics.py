@@ -443,7 +443,13 @@ def _angles_for_frame(
         try:
             value = AngleSample(measure())
         except KeyError as error:
-            value = AngleSample(None, missing.get(str(error.args[0])) or "occluded")
+            name = str(error.args[0])
+            reason = (
+                "unidentifiable_axis"
+                if not metric and name not in missing
+                else missing.get(name) or "occluded"
+            )
+            value = AngleSample(None, reason)
         except ValueError:
             value = AngleSample(None, "unidentifiable_axis")
         return metric_id, plane, value, stance_only

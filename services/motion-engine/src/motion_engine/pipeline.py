@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from math import isclose
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from .calibration import FloatArray
 from .contracts import (
     AnalysisProvenance,
@@ -118,14 +120,17 @@ def _stage_manifests(
                 raise ValueError(
                     f"{stage} manifest does not match the configured stage"
                 )
-            manifest = load_plugin_manifest(
-                artifact.manifest_path,
-                expected_stage=stage,
-                contract_version=contract_version,
-                model_path=artifact.model_path,
-                expected_plugin_version=artifact.expected_plugin_version,
-                commercial_default=commercial_default,
-            )
+            try:
+                manifest = load_plugin_manifest(
+                    artifact.manifest_path,
+                    expected_stage=stage,
+                    contract_version=contract_version,
+                    model_path=artifact.model_path,
+                    expected_plugin_version=artifact.expected_plugin_version,
+                    commercial_default=commercial_default,
+                )
+            except ValidationError as error:
+                raise ValueError(f"invalid {stage} plugin manifest") from error
         else:
             if stage in custom:
                 raise ValueError(f"{stage} requires a plugin manifest")

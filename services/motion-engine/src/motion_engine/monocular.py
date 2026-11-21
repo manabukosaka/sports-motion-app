@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from math import isfinite
@@ -66,7 +66,7 @@ def read_video_metadata(path: Path) -> VideoMetadata:
         return metadata
 
 
-def iter_video_frames(path: Path) -> Iterator[VideoFrame]:
+def iter_video_frames(path: Path) -> Generator[VideoFrame, None, None]:
     """Decode BGR frames with the video backend's presentation clock."""
     with _capture(path) as (capture, metadata):
         previous = -1.0
@@ -90,6 +90,18 @@ def iter_video_frames(path: Path) -> Iterator[VideoFrame]:
             raise ValueError("decoded video exceeds its advertised frame count")
 
 
+def _visible_axes(point: Landmark3D) -> tuple[float, float, float]:
+    x, y, z = point.x, point.y, point.z
+    assert x is not None and y is not None and z is not None
+    return x, y, z
+
+
+def hip_midpoint(left: Landmark3D, right: Landmark3D) -> tuple[float, float, float]:
+    lx, ly, lz = _visible_axes(left)
+    rx, ry, rz = _visible_axes(right)
+    return lx * 0.5 + rx * 0.5, ly * 0.5 + ry * 0.5, lz * 0.5 + rz * 0.5
+
+
 def center_on_hips(pose: Pose3DSequence) -> Pose3DSequence:
     if pose.coordinate_frame != "HipRelative3D" or pose.is_metric_calibrated:
         raise TypeError("hip centering requires hip-relative estimates")
@@ -98,14 +110,19 @@ def center_on_hips(pose: Pose3DSequence) -> Pose3DSequence:
         points = {point.landmark_id: point for point in frame.landmarks}
         if len(points) != len(frame.landmarks):
             raise ValueError("duplicate landmark ID in monocular frame")
-        hips = [points.get(name) for name in ("left_hip", "right_hip")]
-        origin: NDArray[np.float64] | None
-        if all(hip is not None and hip.missing_reason is None for hip in hips):
-            origin = np.mean([hip.axes() for hip in hips if hip is not None], axis=0)
+        left, right = points.get("left_hip"), points.get("right_hip")
+        origin: tuple[float, float, float] | None
+        if (
+            left is not None
+            and left.missing_reason is None
+            and right is not None
+            and right.missing_reason is None
+        ):
+            origin = hip_midpoint(left, right)
         else:
             pelvis = points.get("pelvis")
             origin = (
-                np.array(pelvis.axes(), dtype=np.float64)
+                _visible_axes(pelvis)
                 if pelvis is not None and pelvis.missing_reason is None
                 else None
             )
@@ -125,10 +142,20 @@ def center_on_hips(pose: Pose3DSequence) -> Pose3DSequence:
                     )
                 )
             else:
-                x, y, z = np.array(point.axes(), dtype=np.float64) - origin
+                x, y, z = (
+                    value - offset
+                    for value, offset in zip(_visible_axes(point), origin, strict=True)
+                )
                 landmarks.append(
                     point.model_copy(
-                        update={"x": float(x), "y": float(y), "z": float(z)}
+                        update={"x": x, "y": y, "z": z}
+                        if all(map(isfinite, (x, y, z)))
+                        else {
+                            "x": None,
+                            "y": None,
+                            "z": None,
+                            "missing_reason": "low_confidence",
+                        }
                     )
                 )
         frames.append(frame.model_copy(update={"landmarks": landmarks}))
