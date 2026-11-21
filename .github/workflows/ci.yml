@@ -81,7 +81,6 @@ jobs:
   vertical-slice-api-worker:
     runs-on: ubuntu-latest
     env:
-      UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/sports-motion-vertical-slice-venv
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - uses: actions/checkout@v4
@@ -94,8 +93,12 @@ jobs:
         with:
           python-version: '3.14'
       - run: pnpm install --frozen-lockfile
-      - run: uv sync --project services/motion-engine --frozen
-      - run: pnpm run test:vertical-slice
+      - env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/sports-motion-vertical-slice-venv
+        run: uv sync --project services/motion-engine --frozen
+      - env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/sports-motion-vertical-slice-venv
+        run: pnpm run test:vertical-slice
 
   walking-skeleton-e2e:
     runs-on: ubuntu-latest
