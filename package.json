@@ -14,6 +14,7 @@
     "test:contracts": "pnpm --filter @sports-motion/contracts run test:contracts",
     "test:g3": "pnpm --filter @sports-motion/contracts run test:g3",
     "test:vertical-slice": "pnpm --filter @sports-motion/contracts run build && pnpm --filter @sports-motion/api run test:vertical-slice",
+    "test:walking-skeleton-e2e": "pnpm -r run build && node scripts/test-walking-skeleton-e2e.mjs",
     "verify:lifecycle": "pnpm --filter @sports-motion/contracts run build && pnpm --filter @sports-motion/api run verify:lifecycle",
     "verify:access-policy": "pnpm --filter @sports-motion/contracts run build && pnpm --filter @sports-motion/share-web run build && pnpm --filter @sports-motion/api run verify:access-policy",
     "test": "pnpm --filter @sports-motion/contracts run build && pnpm -r run test"

@@ -1,4 +1,5 @@
 export { readCompatibleContract } from "./compatibility.js";
+export { type SkeletonPoint, skeletonGeometry } from "./skeleton.js";
 export type {
   CalibrationParams,
   CoordinateRevision,

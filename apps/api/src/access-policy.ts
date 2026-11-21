@@ -106,6 +106,7 @@ export interface EvidenceRecord extends Owned {
 interface Link extends Scoped {
   claims: ShareTokenClaims;
   snapshotJson: string;
+  pose3dJson?: string;
   revoked: boolean;
 }
 
@@ -615,11 +616,16 @@ export class AccessPolicy {
         return;
       }
       const token = signShareToken(claims, this.secret);
+      const pose = analysis.pose3d;
       state.links.push({
         id: shareLinkId,
         teamId,
         claims,
         snapshotJson: JSON.stringify(snapshot),
+        ...(validateContract("pose3d", pose) &&
+          pose.contract_version === snapshot.contract_version && {
+            pose3dJson: JSON.stringify(pose),
+          }),
         revoked: false,
       });
       return { shareLinkId, token };
@@ -642,6 +648,7 @@ export class AccessPolicy {
     id: string,
     token: string,
     selectors: Partial<Omit<ShareTokenClaims, "shareLinkId" | "expiresAt">>,
+    representation: "report" | "pose3d" = "report",
   ) {
     const claims = verifyShareToken(token, this.secret);
     if (
@@ -683,7 +690,22 @@ export class AccessPolicy {
       Date.parse(snapshot.expires_at) === claims.expiresAt &&
       (this.allowShare === undefined || this.allowShare(claims))
     ) {
-      return link.snapshotJson;
+      if (representation === "report") {
+        return link.snapshotJson;
+      }
+      if (link.pose3dJson !== undefined) {
+        try {
+          const pose: unknown = JSON.parse(link.pose3dJson);
+          if (
+            validateContract("pose3d", pose) &&
+            pose.contract_version === snapshot.contract_version
+          ) {
+            return link.pose3dJson;
+          }
+        } catch {
+          return;
+        }
+      }
     }
   }
 }

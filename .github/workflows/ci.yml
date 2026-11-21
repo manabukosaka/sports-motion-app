@@ -91,6 +91,23 @@ jobs:
       - run: uv sync --project services/motion-engine --frozen
       - run: pnpm run test:vertical-slice
 
+  walking-skeleton-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.14'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps --only-shell chromium
+      - run: uv sync --project services/motion-engine --frozen
+      - run: pnpm run test:walking-skeleton-e2e
+
   verify-access-policy:
     runs-on: ubuntu-latest
     steps:
